@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useFinancial } from '@/contexts/FinancialContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,9 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Users, Plus, Trash2 } from 'lucide-react';
 import { ContactType } from '@/types/financial';
+import { useContacts, useCreateContact, useDeleteContact } from '@/hooks/finance/useCatalogs';
 
 export default function Contacts() {
-  const { contacts, addContact, deleteContact } = useFinancial();
+  const { contacts } = useContacts();
+  const { mutateAsync: addContact, isPending: isAdding } = useCreateContact();
+  const { mutateAsync: deleteContact, isPending: isDeleting } = useDeleteContact();
+
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<ContactType>('cliente');
@@ -19,9 +22,9 @@ export default function Contacts() {
 
   const filtered = tab === 'todos' ? contacts : contacts.filter(c => c.type === tab);
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!name.trim()) return;
-    addContact({ name: name.trim(), type, email: email || undefined, phone: phone || undefined });
+    await addContact({ name: name.trim(), type, email: email || undefined, phone: phone || undefined });
     setName(''); setEmail(''); setPhone('');
     setOpen(false);
   };
@@ -35,7 +38,7 @@ export default function Contacts() {
           </div>
           <h1 className="text-2xl font-bold">Contatos</h1>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5">
+        <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5" disabled={isAdding || isDeleting}>
           <Plus className="w-4 h-4" /> Novo Contato
         </Button>
       </div>
@@ -64,7 +67,7 @@ export default function Contacts() {
                   <p className="text-xs text-muted-foreground">{[c.email, c.phone].filter(Boolean).join(' · ')}</p>
                 )}
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteContact(c.id)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteContact(c.id)} disabled={isDeleting}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
@@ -81,11 +84,11 @@ export default function Contacts() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nome do contato" />
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nome do contato" disabled={isAdding} />
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
-              <Select value={type} onValueChange={v => setType(v as ContactType)}>
+              <Select value={type} onValueChange={v => setType(v as ContactType)} disabled={isAdding}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="cliente">Cliente</SelectItem>
@@ -95,16 +98,16 @@ export default function Contacts() {
             </div>
             <div className="space-y-2">
               <Label>E-mail</Label>
-              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" />
+              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" disabled={isAdding} />
             </div>
             <div className="space-y-2">
               <Label>Telefone</Label>
-              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-9999" />
+              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-9999" disabled={isAdding} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAdd}>Salvar</Button>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={isAdding}>Cancelar</Button>
+            <Button onClick={handleAdd} disabled={isAdding}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

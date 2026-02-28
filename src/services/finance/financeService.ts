@@ -20,7 +20,7 @@ export interface IFinanceService {
     payload: CreateDocumentPayload,
     payNow?: boolean,
     accountId?: string
-  ): Promise<{ document: FinancialDocument; titles: Title[]; movements?: Movement[] }>;
+  ): Promise<{ document: FinancialDocument; titles: Title[] }>;
   
   settleTitle(
     titleId: string, 
@@ -29,5 +29,13 @@ export interface IFinanceService {
     valuePaid: number
   ): Promise<{ updatedTitle: Title; movement: Movement }>;
   
-  updateInitialBalance(accountId: string, value: number): Promise<void>;
+  updateInitialBalance(accountId: string, value: number): Promise<BankAccount>;
+
+  // Catalogs CRUD
+  createCategory(payload: Omit<Category, 'id'>): Promise<Category>;
+  deleteCategory(id: string): Promise<void>;
+  createAccount(payload: Omit<BankAccount, 'id'>): Promise<BankAccount>;
+  deleteAccount(id: string): Promise<void>;
+  createContact(payload: Omit<Contact, 'id'>): Promise<Contact>;
+  deleteContact(id: string): Promise<void>;
 }

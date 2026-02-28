@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useFinancial } from '@/contexts/FinancialContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -7,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tags, Plus, Trash2 } from 'lucide-react';
 import { CategoryType } from '@/types/financial';
+import { useCategories, useCreateCategory, useDeleteCategory } from '@/hooks/finance/useCatalogs';
 
 const typeLabels: Record<CategoryType, string> = {
   receita: 'Receita', custo: 'Custo', despesa: 'Despesa', investimento: 'Investimento', financeiro: 'Financeiro',
@@ -20,14 +20,17 @@ const typeColors: Record<CategoryType, string> = {
 };
 
 export default function Categories() {
-  const { categories, addCategory, deleteCategory } = useFinancial();
+  const { categories } = useCategories();
+  const { mutateAsync: addCategory, isPending: isAdding } = useCreateCategory();
+  const { mutateAsync: deleteCategory, isPending: isDeleting } = useDeleteCategory();
+  
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('despesa');
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!name.trim()) return;
-    addCategory({ name: name.trim(), type });
+    await addCategory({ name: name.trim(), type });
     setName('');
     setOpen(false);
   };
@@ -41,7 +44,7 @@ export default function Categories() {
           </div>
           <h1 className="text-2xl font-bold">Categorias</h1>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5">
+        <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5" disabled={isAdding || isDeleting}>
           <Plus className="w-4 h-4" /> Nova Categoria
         </Button>
       </div>
@@ -56,11 +59,14 @@ export default function Categories() {
                   {typeLabels[c.type]}
                 </span>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteCategory(c.id)}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteCategory(c.id)} disabled={isDeleting}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
           ))}
+          {categories.length === 0 && (
+            <p className="px-4 py-8 text-center text-sm text-muted-foreground">Nenhuma categoria encontrada.</p>
+          )}
         </div>
       </div>
 
@@ -70,11 +76,11 @@ export default function Categories() {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label>Nome</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Marketing Digital" />
+              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Marketing Digital" disabled={isAdding} />
             </div>
             <div className="space-y-2">
               <Label>Tipo</Label>
-              <Select value={type} onValueChange={v => setType(v as CategoryType)}>
+              <Select value={type} onValueChange={v => setType(v as CategoryType)} disabled={isAdding}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(typeLabels).map(([k, v]) => (
@@ -85,8 +91,8 @@ export default function Categories() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>Cancelar</Button>
-            <Button onClick={handleAdd}>Salvar</Button>
+            <Button variant="outline" onClick={() => setOpen(false)} disabled={isAdding}>Cancelar</Button>
+            <Button onClick={handleAdd} disabled={isAdding}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

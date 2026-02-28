@@ -10,6 +10,9 @@ export interface CashflowLine {
 export interface CashflowResult {
   lines: CashflowLine[];
   alertas: string[];
+  totalEntradas: number;
+  totalSaidas: number;
+  saldoFinal: number;
 }
 
 export function calculateCashflow({
@@ -101,5 +104,9 @@ export function calculateCashflow({
     }
   }
 
-  return { lines, alertas };
+  const totalEntradas = lines.reduce((acc, l) => acc + l.entradas, 0);
+  const totalSaidas = lines.reduce((acc, l) => acc + l.saidas, 0);
+  const saldoFinal = currentBalance;
+
+  return { lines, alertas, totalEntradas, totalSaidas, saldoFinal };
 }

@@ -7,6 +7,7 @@ import { Title, TitleStatus } from '@/types/financial';
 import { ArrowDownToLine, Search } from 'lucide-react';
 import { useTitles } from '@/hooks/finance/useTitles';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
+import { applyTitleUIFilters, TitleUIFilters } from '@/domain/finance/filters';
 import { daysOverdue } from '@/domain/finance/status';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
@@ -29,18 +30,9 @@ export default function Receivables() {
 
   const filtered = useMemo(() => {
     if (!recebimentos || !snapshot) return [];
-    let list = recebimentos;
-    if (tabs[tab].statuses.length > 0) {
-      list = list.filter(t => tabs[tab].statuses.includes(t.status));
-    }
-    if (search) {
-      const s = search.toLowerCase();
-      list = list.filter(t => {
-        const cNome = snapshot.contacts.find(c => c.id === t.contactId)?.name || '';
-        return t.description.toLowerCase().includes(s) || cNome.toLowerCase().includes(s);
-      });
-    }
-    return list.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    const tabNames = ['todos', 'previstos', 'pagos'];
+    const filters: TitleUIFilters = { tab: tabNames[tab], search };
+    return applyTitleUIFilters(recebimentos, filters).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }, [recebimentos, snapshot, tab, search]);
 
   if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando títulos...</div>;

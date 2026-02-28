@@ -26,10 +26,7 @@ export default function CashFlow() {
 
   // Initial balance is starting balance from first line or 0
   const initialBalance = cashflow.lines.length > 0 ? cashflow.lines[0].saldo - cashflow.lines[0].entradas + cashflow.lines[0].saidas : 0;
-  const finalBalance = cashflow.lines.length > 0 ? cashflow.lines[cashflow.lines.length - 1].saldo : 0;
-  const totalEntradas = cashflow.lines.reduce((s, r) => s + r.entradas, 0);
-  const totalSaidas = cashflow.lines.reduce((s, r) => s + r.saidas, 0);
-
+  const { totalEntradas, totalSaidas, saldoFinal: finalBalance } = cashflow;
   // Extract pending titles within range from snapshot directly
   const endDate = new Date(todayStr);
   endDate.setDate(endDate.getDate() + rangeDays);

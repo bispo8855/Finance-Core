@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DocumentType } from '@/types/financial';
+import { filterCategoriesForDocumentType, filterContactsForDocumentType } from '@/domain/finance/helpers';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,18 +39,6 @@ export default function NewDocument() {
   const [installments, setInstallments] = useState('2');
   const [createdTitles, setCreatedTitles] = useState<Title[]>([]);
 
-  if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando formulário...</div>;
-
-  const { categories, contacts, accounts } = snapshot;
-
-  const isReceita = docType === 'venda' || docType === 'receita';
-  const filteredContacts = contacts.filter(c => isReceita ? c.type === 'cliente' : c.type === 'fornecedor');
-  const filteredCategories = categories.filter(c => {
-    if (docType === 'venda' || docType === 'receita') return c.type === 'receita';
-    if (docType === 'compra') return c.type === 'custo';
-    return c.type === 'despesa' || c.type === 'financeiro';
-  });
-
   const previewInstallments = useMemo(() => {
     const val = parseFloat(totalValue) || 0;
     const n = condition === 'parcelado' ? parseInt(installments) || 1 : 1;
@@ -64,6 +53,14 @@ export default function NewDocument() {
       };
     });
   }, [totalValue, condition, installments, competenceDate]);
+
+  if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando formulário...</div>;
+
+  const { categories, contacts, accounts } = snapshot;
+
+  const isReceita = docType === 'venda' || docType === 'receita';
+  const filteredContacts = filterContactsForDocumentType(contacts, docType);
+  const filteredCategories = filterCategoriesForDocumentType(categories, docType);
 
   const handleSave = async (payNow = false) => {
     try {
@@ -180,7 +177,7 @@ export default function NewDocument() {
 
         <div className="space-y-3">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Condição de pagamento</Label>
-          <RadioGroup value={condition} onValueChange={v => setCondition(v as any)} className="flex gap-4">
+          <RadioGroup value={condition} onValueChange={v => setCondition(v as 'avista' | 'parcelado')} className="flex gap-4">
             <div className="flex items-center gap-2">
               <RadioGroupItem value="avista" id="avista" />
               <Label htmlFor="avista" className="font-normal">À vista</Label>

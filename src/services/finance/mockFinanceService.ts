@@ -1,4 +1,4 @@
-import { Title, FinancialDocument, Movement } from '@/types/financial';
+import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 import { initialCategories, initialAccounts, initialContacts, initialDocuments, initialTitles, initialMovements } from '@/data/mockData';
 import { IFinanceService, FinanceSnapshot, CreateDocumentPayload } from './financeService';
 
@@ -98,11 +98,52 @@ export class MockFinanceService implements IFinanceService {
     return { updatedTitle, movement };
   }
 
-  async updateInitialBalance(accountId: string, value: number) {
-    await delay(200);
+  async updateInitialBalance(accountId: string, value: number): Promise<BankAccount> {
+    await delay(300);
     const accIndex = accounts.findIndex(a => a.id === accountId);
     if (accIndex === -1) throw new Error('Account not found');
     accounts[accIndex] = { ...accounts[accIndex], initialBalance: value };
+    return accounts[accIndex];
+  }
+
+  // --- CATALOGS CRUD ---
+  async createCategory(payload: Omit<Category, 'id'>): Promise<Category> {
+    await delay(300);
+    const newCategory = { ...payload, id: uid() };
+    categories.push(newCategory);
+    return newCategory;
+  }
+
+  async deleteCategory(id: string): Promise<void> {
+    await delay(300);
+    const idx = categories.findIndex(c => c.id === id);
+    if (idx !== -1) categories.splice(idx, 1);
+  }
+
+  async createAccount(payload: Omit<BankAccount, 'id'>): Promise<BankAccount> {
+    await delay(300);
+    const newAccount = { ...payload, id: uid() };
+    accounts.push(newAccount);
+    return newAccount;
+  }
+
+  async deleteAccount(id: string): Promise<void> {
+    await delay(300);
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx !== -1) accounts.splice(idx, 1);
+  }
+
+  async createContact(payload: Omit<Contact, 'id'>): Promise<Contact> {
+    await delay(300);
+    const newContact = { ...payload, id: uid() };
+    contacts.push(newContact);
+    return newContact;
+  }
+
+  async deleteContact(id: string): Promise<void> {
+    await delay(300);
+    const idx = contacts.findIndex(c => c.id === id);
+    if (idx !== -1) contacts.splice(idx, 1);
   }
 }
 
