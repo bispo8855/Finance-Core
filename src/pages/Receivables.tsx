@@ -1,11 +1,13 @@
 import { useState, useMemo } from 'react';
-import { useFinancial } from '@/contexts/FinancialContext';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Title, TitleStatus } from '@/types/financial';
 import { ArrowDownToLine, Search } from 'lucide-react';
+import { useTitles } from '@/hooks/finance/useTitles';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
+import { daysOverdue } from '@/domain/finance/status';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 const tabs: { label: string; statuses: TitleStatus[] }[] = [
@@ -16,29 +18,34 @@ const tabs: { label: string; statuses: TitleStatus[] }[] = [
 ];
 
 export default function Receivables() {
-  const { titles, getContactName } = useFinancial();
   const [tab, setTab] = useState(0);
   const [search, setSearch] = useState('');
   const [payTitle, setPayTitle] = useState<Title | null>(null);
 
-  const today = new Date();
+  const { data: snapshot } = useFinanceSnapshot();
+  const { data: recebimentos, isLoading } = useTitles('receber');
+
+  const todayStr = new Date().toISOString().split('T')[0];
 
   const filtered = useMemo(() => {
-    let list = titles.filter(t => t.type === 'receber');
+    if (!recebimentos || !snapshot) return [];
+    let list = recebimentos;
     if (tabs[tab].statuses.length > 0) {
       list = list.filter(t => tabs[tab].statuses.includes(t.status));
     }
     if (search) {
       const s = search.toLowerCase();
-      list = list.filter(t => t.description.toLowerCase().includes(s) || getContactName(t.contactId).toLowerCase().includes(s));
+      list = list.filter(t => {
+        const cNome = snapshot.contacts.find(c => c.id === t.contactId)?.name || '';
+        return t.description.toLowerCase().includes(s) || cNome.toLowerCase().includes(s);
+      });
     }
     return list.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  }, [titles, tab, search, getContactName]);
+  }, [recebimentos, snapshot, tab, search]);
 
-  const daysOverdue = (dueDate: string) => {
-    const diff = Math.floor((today.getTime() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000);
-    return diff > 0 ? diff : 0;
-  };
+  if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando títulos...</div>;
+
+  const getContactName = (id: string) => snapshot.contacts.find(c => c.id === id)?.name || '—';
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -93,7 +100,7 @@ export default function Receivables() {
                   <td className="px-4 py-3 text-right font-medium">{fmt(t.value)}</td>
                   <td className="px-4 py-3 text-center"><StatusBadge status={t.status} /></td>
                   <td className="px-4 py-3 text-center">
-                    {t.status === 'atrasado' ? <span className="text-xs font-medium text-negative">{daysOverdue(t.dueDate)}d</span> : '—'}
+                    {t.status === 'atrasado' ? <span className="text-xs font-medium text-negative">{daysOverdue(t.dueDate, todayStr)}d</span> : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {['previsto', 'atrasado'].includes(t.status) && (

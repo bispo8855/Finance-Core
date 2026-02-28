@@ -1,6 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFinancial } from '@/contexts/FinancialContext';
 import { KPICard } from '@/components/shared/KPICard';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
@@ -10,65 +9,33 @@ import {
   DollarSign, TrendingUp, TrendingDown, ArrowDownToLine,
   ArrowUpFromLine, AlertTriangle, BarChart3, CreditCard, Plus,
 } from 'lucide-react';
+import { useDashboard } from '@/hooks/finance/useDashboard';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { titles, categories, getContactName, getCategoryName, getTotalBalance } = useFinancial();
   const [tab, setTab] = useState<'receber' | 'pagar'>('receber');
   const [payTitle, setPayTitle] = useState<Title | null>(null);
 
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const todayStr = new Date().toISOString().split('T')[0];
   const monthStr = todayStr.substring(0, 7);
-  const future30 = new Date(today);
-  future30.setDate(future30.getDate() + 30);
-  const future30Str = future30.toISOString().split('T')[0];
 
-  const kpis = useMemo(() => {
-    const receitaMes = titles.filter(t => t.type === 'receber' && t.dueDate.startsWith(monthStr))
-      .reduce((s, t) => s + t.value, 0);
-    const despesaMes = titles.filter(t => t.type === 'pagar' && t.dueDate.startsWith(monthStr))
-      .reduce((s, t) => s + t.value, 0);
-    const resultado = receitaMes - despesaMes;
-    const saldo = getTotalBalance();
-    const aReceber30 = titles.filter(t => t.type === 'receber' && ['previsto', 'atrasado'].includes(t.status) && t.dueDate <= future30Str && t.dueDate >= todayStr)
-      .reduce((s, t) => s + t.value, 0);
-    const aPagar30 = titles.filter(t => t.type === 'pagar' && ['previsto', 'atrasado'].includes(t.status) && t.dueDate <= future30Str && t.dueDate >= todayStr)
-      .reduce((s, t) => s + t.value, 0);
-    const vencidosReceber = titles.filter(t => t.type === 'receber' && t.status === 'atrasado')
-      .reduce((s, t) => s + t.value, 0);
-    const vencidosPagar = titles.filter(t => t.type === 'pagar' && t.status === 'atrasado')
-      .reduce((s, t) => s + t.value, 0);
+  const { data: snapshot } = useFinanceSnapshot();
+  const { data: kpis, isLoading } = useDashboard(monthStr);
 
-    const gastosPorCategoria: Record<string, number> = {};
-    titles.filter(t => t.type === 'pagar' && t.dueDate.startsWith(monthStr)).forEach(t => {
-      gastosPorCategoria[t.categoryId] = (gastosPorCategoria[t.categoryId] || 0) + t.value;
-    });
-    const topCategoria = Object.entries(gastosPorCategoria).sort((a, b) => b[1] - a[1])[0];
+  if (isLoading || !kpis || !snapshot) {
+    return <div className="p-8 text-center text-muted-foreground">Carregando dashboard...</div>;
+  }
 
-    return { receitaMes, resultado, saldo, aReceber30, aPagar30, vencidosReceber, vencidosPagar, topCategoria };
-  }, [titles, monthStr, todayStr, future30Str, getTotalBalance]);
+  const getContactName = (id: string) => snapshot.contacts.find(c => c.id === id)?.name || '—';
+  const getCategoryName = (id: string) => snapshot.categories.find(c => c.id === id)?.name || '—';
 
-  const upcomingTitles = useMemo(() => {
-    return titles
-      .filter(t => t.type === tab && ['previsto', 'atrasado'].includes(t.status))
-      .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-      .slice(0, 10);
-  }, [titles, tab]);
-
-  const alerts = useMemo(() => {
-    const items: string[] = [];
-    if (kpis.vencidosReceber > 0) items.push(`Você tem ${fmt(kpis.vencidosReceber)} vencido a receber`);
-    if (kpis.vencidosPagar > 0) items.push(`Você tem ${fmt(kpis.vencidosPagar)} vencido a pagar`);
-    if (kpis.saldo < 0) items.push('Saldo consolidado está negativo!');
-    if (kpis.saldo - kpis.aPagar30 < 0) items.push('Saldo projetado pode ficar negativo nos próximos 30 dias');
-    return items;
-  }, [kpis]);
+  const upcomingTitles = kpis.upcomingTitles.filter(t => t.type === tab);
 
   const daysOverdue = (dueDate: string) => {
-    const diff = Math.floor((today.getTime() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000);
+    const diff = Math.floor((new Date().getTime() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000);
     return diff > 0 ? diff : 0;
   };
 
@@ -84,7 +51,6 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard title="Receita do mês" value={fmt(kpis.receitaMes)} icon={DollarSign} variant="positive" />
         <KPICard title="Resultado do mês" value={fmt(kpis.resultado)} icon={kpis.resultado >= 0 ? TrendingUp : TrendingDown} variant={kpis.resultado >= 0 ? 'positive' : 'negative'} />
@@ -100,19 +66,17 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Alerts */}
-      {alerts.length > 0 && (
+      {kpis.alerts.length > 0 && (
         <div className="bg-destructive-subtle border border-destructive/20 rounded-xl p-4 space-y-2">
           <h3 className="text-sm font-semibold text-negative flex items-center gap-2">
             <AlertTriangle className="w-4 h-4" /> Alertas
           </h3>
-          {alerts.map((a, i) => (
+          {kpis.alerts.map((a, i) => (
             <p key={i} className="text-sm text-negative/80">• {a}</p>
           ))}
         </div>
       )}
 
-      {/* Upcoming */}
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b flex items-center justify-between">
           <h3 className="font-semibold">Próximos vencimentos</h3>

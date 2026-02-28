@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useFinancial } from '@/contexts/FinancialContext';
 import { DocumentType } from '@/types/financial';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +8,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { CheckCircle, ArrowLeft } from 'lucide-react';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
+import { useCreateDocument } from '@/hooks/finance/useCreateDocument';
+import { Title } from '@/types/financial';
 
 const docTypeLabels: Record<DocumentType, string> = {
   venda: 'Venda',
@@ -21,7 +23,9 @@ const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDi
 
 export default function NewDocument() {
   const navigate = useNavigate();
-  const { categories, contacts, accounts, addDocument } = useFinancial();
+
+  const { data: snapshot, isLoading } = useFinanceSnapshot();
+  const { mutateAsync: createDocument, isPending } = useCreateDocument();
 
   const [step, setStep] = useState<'form' | 'preview' | 'done'>('form');
   const [docType, setDocType] = useState<DocumentType>('venda');
@@ -32,7 +36,11 @@ export default function NewDocument() {
   const [description, setDescription] = useState('');
   const [condition, setCondition] = useState<'avista' | 'parcelado'>('avista');
   const [installments, setInstallments] = useState('2');
-  const [createdTitles, setCreatedTitles] = useState<any[]>([]);
+  const [createdTitles, setCreatedTitles] = useState<Title[]>([]);
+
+  if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando formulário...</div>;
+
+  const { categories, contacts, accounts } = snapshot;
 
   const isReceita = docType === 'venda' || docType === 'receita';
   const filteredContacts = contacts.filter(c => isReceita ? c.type === 'cliente' : c.type === 'fornecedor');
@@ -57,19 +65,28 @@ export default function NewDocument() {
     });
   }, [totalValue, condition, installments, competenceDate]);
 
-  const handleSave = (payNow = false) => {
-    const result = addDocument({
-      type: docType,
-      contactId,
-      categoryId,
-      competenceDate,
-      totalValue: parseFloat(totalValue) || 0,
-      description,
-      condition,
-      installments: condition === 'parcelado' ? parseInt(installments) || 1 : 1,
-    }, payNow, payNow ? accounts[0]?.id : undefined);
-    setCreatedTitles(result.titles);
-    setStep('done');
+  const handleSave = async (payNow = false) => {
+    try {
+      const result = await createDocument({
+        payload: {
+          type: docType,
+          contactId,
+          categoryId,
+          competenceDate,
+          totalValue: parseFloat(totalValue) || 0,
+          description,
+          condition,
+          installments: condition === 'parcelado' ? parseInt(installments) || 1 : 1,
+        },
+        payNow,
+        accountId: payNow ? accounts[0]?.id : undefined
+      });
+      setCreatedTitles(result.titles);
+      setStep('done');
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao criar lançamento.');
+    }
   };
 
   if (step === 'done') {
@@ -113,7 +130,6 @@ export default function NewDocument() {
       </div>
 
       <div className="bg-card rounded-xl border shadow-sm p-6 space-y-5">
-        {/* Tipo */}
         <div className="space-y-2">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tipo</Label>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -126,7 +142,6 @@ export default function NewDocument() {
           </div>
         </div>
 
-        {/* Contato */}
         <div className="space-y-2">
           <Label>{isReceita ? 'Cliente' : 'Fornecedor'}</Label>
           <Select value={contactId} onValueChange={setContactId}>
@@ -137,7 +152,6 @@ export default function NewDocument() {
           </Select>
         </div>
 
-        {/* Categoria */}
         <div className="space-y-2">
           <Label>Categoria</Label>
           <Select value={categoryId} onValueChange={setCategoryId}>
@@ -164,7 +178,6 @@ export default function NewDocument() {
           <Textarea placeholder="Descreva o lançamento..." value={description} onChange={e => setDescription(e.target.value)} rows={2} />
         </div>
 
-        {/* Condição */}
         <div className="space-y-3">
           <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Condição de pagamento</Label>
           <RadioGroup value={condition} onValueChange={v => setCondition(v as any)} className="flex gap-4">
@@ -186,7 +199,6 @@ export default function NewDocument() {
           </div>
         )}
 
-        {/* Preview */}
         {parseFloat(totalValue) > 0 && (
           <div className="bg-muted rounded-lg p-4 space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prévia dos títulos</p>
@@ -202,10 +214,10 @@ export default function NewDocument() {
         )}
 
         <div className="flex gap-3 pt-2">
-          <Button variant="outline" className="flex-1" onClick={() => handleSave(false)}>
+          <Button variant="outline" className="flex-1" disabled={isPending} onClick={() => handleSave(false)}>
             Salvar como previsto
           </Button>
-          <Button className="flex-1" onClick={() => handleSave(true)}>
+          <Button className="flex-1" disabled={isPending} onClick={() => handleSave(true)}>
             Salvar e baixar agora
           </Button>
         </div>

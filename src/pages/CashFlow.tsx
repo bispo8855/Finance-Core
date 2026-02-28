@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react';
-import { useFinancial } from '@/contexts/FinancialContext';
+import { useState } from 'react';
 import { TrendingUp, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useCashflow } from '@/hooks/finance/useCashflow';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 const periods = [
@@ -12,50 +13,32 @@ const periods = [
 ];
 
 export default function CashFlow() {
-  const { titles, getTotalBalance } = useFinancial();
   const [periodIdx, setPeriodIdx] = useState(2); // default 60 dias
+  const todayStr = new Date().toISOString().split('T')[0];
+  const rangeDays = periods[periodIdx].days;
 
-  const today = new Date();
-  const todayStr = today.toISOString().split('T')[0];
+  const { data: snapshot } = useFinanceSnapshot();
+  const { data: cashflow, isLoading } = useCashflow({ startDateISO: todayStr, rangeDays });
 
-  const data = useMemo(() => {
-    const days = periods[periodIdx].days;
-    const endDate = new Date(today);
-    endDate.setDate(endDate.getDate() + days);
-    const endStr = endDate.toISOString().split('T')[0];
+  if (isLoading || !cashflow || !snapshot) {
+    return <div className="p-8 text-center text-muted-foreground">Projetando fluxo de caixa...</div>;
+  }
 
-    const initialBalance = getTotalBalance();
+  // Initial balance is starting balance from first line or 0
+  const initialBalance = cashflow.lines.length > 0 ? cashflow.lines[0].saldo - cashflow.lines[0].entradas + cashflow.lines[0].saidas : 0;
+  const finalBalance = cashflow.lines.length > 0 ? cashflow.lines[cashflow.lines.length - 1].saldo : 0;
+  const totalEntradas = cashflow.lines.reduce((s, r) => s + r.entradas, 0);
+  const totalSaidas = cashflow.lines.reduce((s, r) => s + r.saidas, 0);
 
-    // Get pending titles in period
-    const pendingTitles = titles.filter(t =>
-      ['previsto', 'atrasado'].includes(t.status) &&
-      t.dueDate >= todayStr && t.dueDate <= endStr
-    );
+  // Extract pending titles within range from snapshot directly
+  const endDate = new Date(todayStr);
+  endDate.setDate(endDate.getDate() + rangeDays);
+  const endStr = endDate.toISOString().split('T')[0];
 
-    const totalEntradas = pendingTitles.filter(t => t.type === 'receber').reduce((s, t) => s + t.value, 0);
-    const totalSaidas = pendingTitles.filter(t => t.type === 'pagar').reduce((s, t) => s + t.value, 0);
-    const saldoFinal = initialBalance + totalEntradas - totalSaidas;
-
-    // Build daily table (grouped by week for longer periods)
-    const dailyMap: Record<string, { entradas: number; saidas: number }> = {};
-    pendingTitles.forEach(t => {
-      if (!dailyMap[t.dueDate]) dailyMap[t.dueDate] = { entradas: 0, saidas: 0 };
-      if (t.type === 'receber') dailyMap[t.dueDate].entradas += t.value;
-      else dailyMap[t.dueDate].saidas += t.value;
-    });
-
-    const sortedDates = Object.keys(dailyMap).sort();
-    let runningBalance = initialBalance;
-    const rows = sortedDates.map(date => {
-      const d = dailyMap[date];
-      runningBalance += d.entradas - d.saidas;
-      return { date, entradas: d.entradas, saidas: d.saidas, saldo: runningBalance };
-    });
-
-    const hasNegative = rows.some(r => r.saldo < 0);
-
-    return { initialBalance, totalEntradas, totalSaidas, saldoFinal, rows, pendingTitles, hasNegative };
-  }, [titles, periodIdx, todayStr, getTotalBalance]);
+  const pendingTitles = snapshot.titles.filter(t => 
+    ['previsto', 'atrasado'].includes(t.status) &&
+    t.dueDate >= todayStr && t.dueDate <= endStr
+  );
 
   return (
     <div className="space-y-6 max-w-7xl">
@@ -69,7 +52,6 @@ export default function CashFlow() {
         </div>
       </div>
 
-      {/* Period Selector */}
       <div className="flex gap-1 bg-muted rounded-lg p-0.5 w-fit">
         {periods.map((p, i) => (
           <button key={i} onClick={() => setPeriodIdx(i)}
@@ -79,35 +61,36 @@ export default function CashFlow() {
         ))}
       </div>
 
-      {/* Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-card rounded-xl border p-4">
           <p className="text-xs text-muted-foreground font-medium">Saldo Inicial</p>
-          <p className="text-xl font-bold mt-1">{fmt(data.initialBalance)}</p>
+          <p className="text-xl font-bold mt-1">{fmt(initialBalance)}</p>
         </div>
         <div className="bg-card rounded-xl border p-4">
           <p className="text-xs text-muted-foreground font-medium">Entradas Previstas</p>
-          <p className="text-xl font-bold mt-1 text-positive">{fmt(data.totalEntradas)}</p>
+          <p className="text-xl font-bold mt-1 text-positive">{fmt(totalEntradas)}</p>
         </div>
         <div className="bg-card rounded-xl border p-4">
           <p className="text-xs text-muted-foreground font-medium">Saídas Previstas</p>
-          <p className="text-xl font-bold mt-1 text-negative">{fmt(data.totalSaidas)}</p>
+          <p className="text-xl font-bold mt-1 text-negative">{fmt(totalSaidas)}</p>
         </div>
-        <div className={cn('bg-card rounded-xl border p-4', data.saldoFinal < 0 && 'border-destructive')}>
-          <p className="text-xs text-muted-foreground font-medium">Saldo Projetado</p>
-          <p className={cn('text-xl font-bold mt-1', data.saldoFinal < 0 ? 'text-negative' : 'text-positive')}>{fmt(data.saldoFinal)}</p>
+        <div className={cn('bg-card rounded-xl border p-4', finalBalance < 0 && 'border-destructive')}>
+          <p className="text-xs text-muted-foreground font-medium">Saldo Final Projetado</p>
+          <p className={cn('text-xl font-bold mt-1', finalBalance < 0 ? 'text-negative' : 'text-positive')}>{fmt(finalBalance)}</p>
         </div>
       </div>
 
-      {/* Alert */}
-      {data.hasNegative && (
+      {cashflow.alertas.length > 0 && (
         <div className="bg-destructive-subtle border border-destructive/20 rounded-xl p-4 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-negative shrink-0" />
-          <p className="text-sm text-negative font-medium">Atenção: O saldo projetado ficará negativo em alguns dias deste período.</p>
+          <div className="space-y-1">
+            {cashflow.alertas.map((alerta, i) => (
+              <p key={i} className="text-sm text-negative font-medium">{alerta}</p>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Daily Table */}
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b">
           <h3 className="font-semibold">Movimentação por dia</h3>
@@ -123,10 +106,10 @@ export default function CashFlow() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {data.rows.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">Nenhuma movimentação prevista no período.</td></tr>
-              ) : data.rows.map(r => (
-                <tr key={r.date} className={cn('hover:bg-muted/30 transition-colors', r.saldo < 0 && 'bg-destructive-subtle')}>
+              {cashflow.lines.length === 0 ? (
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">Nenhuma movimentação para exibir.</td></tr>
+              ) : cashflow.lines.map((r, idx) => (
+                <tr key={idx} className={cn('hover:bg-muted/30 transition-colors', r.saldo < 0 && 'bg-destructive-subtle')}>
                   <td className="px-4 py-3">{new Date(r.date + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-4 py-3 text-right text-positive font-medium">{r.entradas > 0 ? fmt(r.entradas) : '—'}</td>
                   <td className="px-4 py-3 text-right text-negative font-medium">{r.saidas > 0 ? fmt(r.saidas) : '—'}</td>
@@ -140,13 +123,12 @@ export default function CashFlow() {
         </div>
       </div>
 
-      {/* Detail Titles */}
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b">
           <h3 className="font-semibold">Detalhamento por vencimentos</h3>
         </div>
         <div className="divide-y">
-          {data.pendingTitles.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(t => (
+          {pendingTitles.sort((a, b) => a.dueDate.localeCompare(b.dueDate)).map(t => (
             <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
               <div className="space-y-0.5">
                 <p className="text-sm font-medium">{t.description}</p>

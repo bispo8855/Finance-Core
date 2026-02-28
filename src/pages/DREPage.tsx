@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
-import { useFinancial } from '@/contexts/FinancialContext';
+import { useState } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useDRE } from '@/hooks/finance/useDRE';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 const pct = (part: number, total: number) => total === 0 ? '0%' : (part / total * 100).toFixed(1) + '%';
@@ -12,52 +12,17 @@ const months = [
 ];
 
 export default function DREPage() {
-  const { titles, categories, getCategoryName } = useFinancial();
   const currentMonth = new Date().getMonth();
   const currentYear = new Date().getFullYear();
   const [month, setMonth] = useState(currentMonth);
   const [year] = useState(currentYear);
 
   const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const { data: dre, isLoading } = useDRE(monthStr);
 
-  const dre = useMemo(() => {
-    // All titles with competence in this month (using document's competence via title dueDate approx)
-    // For simplicity, we'll use the title's dueDate month for competence grouping
-    const monthTitles = titles.filter(t => t.dueDate.startsWith(monthStr));
-
-    const receitaBruta = monthTitles.filter(t => t.type === 'receber' && categories.find(c => c.id === t.categoryId)?.type === 'receita')
-      .reduce((s, t) => s + t.value, 0);
-
-    const deducoes = 0; // placeholder
-    const receitaLiquida = receitaBruta - deducoes;
-
-    const custosVariaveis = monthTitles.filter(t => t.type === 'pagar' && categories.find(c => c.id === t.categoryId)?.type === 'custo')
-      .reduce((s, t) => s + t.value, 0);
-
-    const margemContribuicao = receitaLiquida - custosVariaveis;
-
-    const despesasFixas = monthTitles.filter(t => t.type === 'pagar' && categories.find(c => c.id === t.categoryId)?.type === 'despesa')
-      .reduce((s, t) => s + t.value, 0);
-
-    const resultadoOperacional = margemContribuicao - despesasFixas;
-
-    const financeiro = monthTitles.filter(t => t.type === 'pagar' && categories.find(c => c.id === t.categoryId)?.type === 'financeiro')
-      .reduce((s, t) => s + t.value, 0);
-
-    const resultadoLiquido = resultadoOperacional - financeiro;
-
-    // Top 5 gastos por categoria
-    const gastosPorCategoria: Record<string, number> = {};
-    monthTitles.filter(t => t.type === 'pagar').forEach(t => {
-      gastosPorCategoria[t.categoryId] = (gastosPorCategoria[t.categoryId] || 0) + t.value;
-    });
-    const top5 = Object.entries(gastosPorCategoria)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([catId, value]) => ({ name: getCategoryName(catId), value }));
-
-    return { receitaBruta, deducoes, receitaLiquida, custosVariaveis, margemContribuicao, despesasFixas, resultadoOperacional, financeiro, resultadoLiquido, top5 };
-  }, [titles, categories, monthStr, getCategoryName]);
+  if (isLoading || !dre) {
+    return <div className="p-8 text-center text-muted-foreground">Calculando DRE...</div>;
+  }
 
   const DRERow = ({ label, value, bold, result, indent }: { label: string; value: number; bold?: boolean; result?: boolean; indent?: boolean }) => (
     <div className={cn(
@@ -86,7 +51,6 @@ export default function DREPage() {
         </div>
       </div>
 
-      {/* Month Selector */}
       <div className="flex gap-1 bg-muted rounded-lg p-0.5 overflow-x-auto w-fit">
         {months.map((m, i) => (
           <button key={i} onClick={() => setMonth(i)}
@@ -96,7 +60,6 @@ export default function DREPage() {
         ))}
       </div>
 
-      {/* DRE Table */}
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b">
           <h3 className="font-semibold">{months[month]} {year}</h3>
@@ -114,7 +77,6 @@ export default function DREPage() {
         </div>
       </div>
 
-      {/* Top 5 */}
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b">
           <h3 className="font-semibold">Top 5 gastos por categoria</h3>
