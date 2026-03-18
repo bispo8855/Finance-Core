@@ -1,0 +1,15 @@
+-- 0004_registration_improvements.sql
+
+-- Contas
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS institution TEXT;
+
+-- Categorias
+ALTER TABLE categories ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+
+-- Contatos
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS document TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE contacts ADD COLUMN IF NOT EXISTS notes TEXT;

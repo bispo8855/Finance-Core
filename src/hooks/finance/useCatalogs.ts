@@ -26,6 +26,15 @@ export function useCreateCategory() {
   });
 }
 
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<Omit<Category, 'id'>> }) => 
+      financeService.updateCategory(id, payload),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['finance', 'snapshot'] }); }
+  });
+}
+
 export function useDeleteCategory() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -42,6 +51,15 @@ export function useCreateAccount() {
   });
 }
 
+export function useUpdateAccount() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<Omit<BankAccount, 'id'>> }) => 
+      financeService.updateAccount(id, payload),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['finance', 'snapshot'] }); }
+  });
+}
+
 export function useDeleteAccount() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -54,6 +72,15 @@ export function useCreateContact() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: Omit<Contact, 'id'>) => financeService.createContact(payload),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['finance', 'snapshot'] }); }
+  });
+}
+
+export function useUpdateContact() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: Partial<Omit<Contact, 'id'>> }) => 
+      financeService.updateContact(id, payload),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['finance', 'snapshot'] }); }
   });
 }

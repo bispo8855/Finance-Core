@@ -12,7 +12,7 @@ export function useTitles(type: 'receber' | 'pagar') {
         ...t,
         status: deriveStatus(t, todayStr)
       }));
-      return virtualTitles.filter(t => t.type === type);
+      return virtualTitles.filter(t => t.side === type);
     },
   });
 }

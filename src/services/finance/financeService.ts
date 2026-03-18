@@ -11,7 +11,9 @@ export interface FinanceSnapshot {
   movements: Movement[];
 }
 
-export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'>;
+export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'> & {
+  customInstallments?: { dueDate: string; value: number }[];
+};
 
 export interface IFinanceService {
   getSnapshot(): Promise<FinanceSnapshot>;
@@ -21,6 +23,11 @@ export interface IFinanceService {
     payNow?: boolean,
     accountId?: string
   ): Promise<{ document: FinancialDocument; titles: Title[] }>;
+
+  updateDocument(
+    documentId: string,
+    payload: CreateDocumentPayload
+  ): Promise<{ document: FinancialDocument; titles: Title[] }>;
   
   settleTitle(
     titleId: string, 
@@ -29,13 +36,20 @@ export interface IFinanceService {
     valuePaid: number
   ): Promise<{ updatedTitle: Title; movement: Movement }>;
   
+  undoSettleTitle(titleId: string): Promise<{ updatedTitle: Title }>;
+  
   updateInitialBalance(accountId: string, value: number): Promise<BankAccount>;
 
   // Catalogs CRUD
   createCategory(payload: Omit<Category, 'id'>): Promise<Category>;
+  updateCategory(id: string, payload: Partial<Omit<Category, 'id'>>): Promise<Category>;
   deleteCategory(id: string): Promise<void>;
   createAccount(payload: Omit<BankAccount, 'id'>): Promise<BankAccount>;
+  updateAccount(id: string, payload: Partial<Omit<BankAccount, 'id'>>): Promise<BankAccount>;
   deleteAccount(id: string): Promise<void>;
   createContact(payload: Omit<Contact, 'id'>): Promise<Contact>;
+  updateContact(id: string, payload: Partial<Omit<Contact, 'id'>>): Promise<Contact>;
   deleteContact(id: string): Promise<void>;
+  
+  deleteTitle(titleId: string): Promise<void>;
 }

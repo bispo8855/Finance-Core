@@ -3,6 +3,7 @@ import { SidebarTrigger } from '@/components/ui/sidebar';
 import { Button } from '@/components/ui/button';
 import { Plus, Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { UserCompanyBadge } from './UserCompanyBadge';
 
 export function AppHeader() {
   const navigate = useNavigate();
@@ -19,8 +20,9 @@ export function AppHeader() {
           />
         </div>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-medium text-muted-foreground hidden md:block">Minha Empresa Ltda</span>
+      <div className="flex items-center gap-4">
+        <UserCompanyBadge />
+        
         <Button size="sm" onClick={() => navigate('/lancar')} className="gap-1.5">
           <Plus className="w-4 h-4" />
           <span className="hidden sm:inline">Novo lançamento</span>

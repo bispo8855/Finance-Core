@@ -1,19 +1,24 @@
 export type DocumentType = 'venda' | 'compra' | 'despesa' | 'receita';
 export type TitleStatus = 'previsto' | 'pago' | 'recebido' | 'atrasado' | 'renegociado' | 'cancelado';
-export type ContactType = 'cliente' | 'fornecedor';
+export type ContactType = 'cliente' | 'fornecedor' | 'ambos';
 export type CategoryType = 'receita' | 'custo' | 'despesa' | 'investimento' | 'financeiro';
 
 export interface Category {
   id: string;
   name: string;
   type: CategoryType;
+  isActive?: boolean;
 }
 
 export interface BankAccount {
   id: string;
   name: string;
   type: 'banco' | 'caixa';
-  initialBalance: number;
+  institution?: string;
+  initialBalance: number; // Keep for backwards compatibility
+  openingBalance: number;
+  openingBalanceDate: string | null;
+  isActive?: boolean;
 }
 
 export interface Contact {
@@ -23,6 +28,8 @@ export interface Contact {
   document?: string;
   email?: string;
   phone?: string;
+  notes?: string;
+  isActive?: boolean;
 }
 
 export interface FinancialDocument {
@@ -46,10 +53,12 @@ export interface Title {
   dueDate: string;
   value: number;
   status: TitleStatus;
-  type: 'receber' | 'pagar';
+  side: 'receber' | 'pagar';
   contactId: string;
   categoryId: string;
   description: string;
+  settledAt?: string;
+  settlementMovementId?: string;
 }
 
 export interface Movement {
@@ -58,5 +67,7 @@ export interface Movement {
   accountId: string;
   paymentDate: string;
   valuePaid: number;
+  feeAmount?: number;
+  notes?: string;
   type: 'entrada' | 'saida';
 }

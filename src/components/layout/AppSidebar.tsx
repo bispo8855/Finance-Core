@@ -1,9 +1,10 @@
 import {
   LayoutDashboard, FilePlus, ArrowDownToLine, ArrowUpFromLine,
-  TrendingUp, BarChart3, Tags, Building2, Users, Settings, DollarSign,
+  TrendingUp, BarChart3, Tags, Building2, Users, Settings, DollarSign, LogOut,
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarMenu, SidebarMenuButton, SidebarMenuItem,
@@ -28,6 +29,7 @@ const registrationNav = [
 export function AppSidebar() {
   const { state } = useSidebar();
   const collapsed = state === 'collapsed';
+  const { signOut } = useAuth();
   const location = useLocation();
   const isActive = (path: string) => location.pathname === path;
 
@@ -114,6 +116,12 @@ export function AppSidebar() {
                     <Settings className="w-4 h-4 shrink-0" />
                     {!collapsed && <span>Configurações</span>}
                   </NavLink>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Sair da Conta" onClick={signOut} className="text-secondary-foreground hover:text-destructive">
+                  <LogOut className="w-4 h-4 shrink-0" />
+                  {!collapsed && <span>Sair</span>}
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>

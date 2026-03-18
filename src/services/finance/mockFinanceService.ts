@@ -51,7 +51,7 @@ export class MockFinanceService implements IFinanceService {
         dueDate: dueDate.toISOString().split('T')[0],
         value: i === numInstallments - 1 ? payload.totalValue - valuePerInstallment * (numInstallments - 1) : valuePerInstallment,
         status: payNow && i === 0 ? (titleType === 'receber' ? 'recebido' : 'pago') : 'previsto',
-        type: titleType,
+        side: titleType,
         contactId: payload.contactId,
         categoryId: payload.categoryId,
         description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
@@ -59,14 +59,19 @@ export class MockFinanceService implements IFinanceService {
       newTitles.push(title);
 
       if (payNow && i === 0 && accountId) {
+        const movementId = uid();
         newMovements.push({
-          id: uid(),
+          id: movementId,
           titleId,
           accountId,
           paymentDate: today,
           valuePaid: title.value,
           type: titleType === 'receber' ? 'entrada' : 'saida',
+          feeAmount: 0,
+          notes: ''
         });
+        title.settledAt = today;
+        title.settlementMovementId = movementId;
       }
     }
 
@@ -77,25 +82,161 @@ export class MockFinanceService implements IFinanceService {
     return { document: doc, titles: newTitles, movements: newMovements };
   }
 
+  async updateDocument(documentId: string, payload: CreateDocumentPayload) {
+    await delay(400);
+    
+    const existingTitles = titles.filter(t => t.documentId === documentId);
+    if (existingTitles.some(t => t.status === 'pago' || t.status === 'recebido')) {
+      throw new Error('Não é possível editar um lançamento que já possui baixas. Exclua a baixa primeiro.');
+    }
+
+    // Delete existing titles
+    for (let i = titles.length - 1; i >= 0; i--) {
+      if (titles[i].documentId === documentId) {
+        titles.splice(i, 1);
+      }
+    }
+
+    const docIndex = documents.findIndex(d => d.id === documentId);
+    if (docIndex === -1) throw new Error('Document not found');
+
+    const updatedDoc: FinancialDocument = { ...documents[docIndex], ...payload };
+    documents[docIndex] = updatedDoc;
+
+    const titleType: 'receber' | 'pagar' = (payload.type === 'venda' || payload.type === 'receita') ? 'receber' : 'pagar';
+    const numInstallments = payload.condition === 'parcelado' ? payload.installments : 1;
+    
+    const newTitles: Title[] = [];
+
+    if (payload.condition === 'parcelado' && payload.customInstallments && payload.customInstallments.length > 0) {
+      if (payload.customInstallments.length !== numInstallments) {
+        throw new Error('Número de parcelas customizadas destoa do total informado.');
+      }
+      for (let i = 0; i < numInstallments; i++) {
+        const custom = payload.customInstallments[i];
+        const title: Title = {
+          id: uid(),
+          documentId,
+          installment: i + 1,
+          totalInstallments: numInstallments,
+          dueDate: custom.dueDate,
+          value: custom.value,
+          status: 'previsto',
+          side: titleType,
+          contactId: payload.contactId,
+          categoryId: payload.categoryId,
+          description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
+        };
+        newTitles.push(title);
+      }
+    } else {
+      const valuePerInstallment = Math.round((payload.totalValue / numInstallments) * 100) / 100;
+      for (let i = 0; i < numInstallments; i++) {
+        const dueDate = new Date(payload.competenceDate);
+        dueDate.setMonth(dueDate.getMonth() + i);
+        const title: Title = {
+          id: uid(),
+          documentId,
+          installment: i + 1,
+          totalInstallments: numInstallments,
+          dueDate: dueDate.toISOString().split('T')[0],
+          value: i === numInstallments - 1 ? payload.totalValue - valuePerInstallment * (numInstallments - 1) : valuePerInstallment,
+          status: 'previsto',
+          side: titleType,
+          contactId: payload.contactId,
+          categoryId: payload.categoryId,
+          description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
+        };
+        newTitles.push(title);
+      }
+    }
+
+    titles.push(...newTitles);
+
+    return { document: updatedDoc, titles: newTitles };
+  }
+
   async settleTitle(titleId: string, accountId: string, paymentDate: string, valuePaid: number) {
     await delay(300);
     const titleIndex = titles.findIndex(t => t.id === titleId);
     if (titleIndex === -1) throw new Error('Title not found');
 
-    const updatedTitle = { ...titles[titleIndex], status: titles[titleIndex].type === 'receber' ? ('recebido' as const) : ('pago' as const) };
-    titles[titleIndex] = updatedTitle;
-
+    const movementId = uid();
     const movement: Movement = {
-      id: uid(),
+      id: movementId,
       titleId,
       accountId,
       paymentDate,
       valuePaid,
-      type: updatedTitle.type === 'receber' ? 'entrada' : 'saida',
+      type: titles[titleIndex].side === 'receber' ? 'entrada' : 'saida',
+      feeAmount: 0,
+      notes: ''
     };
     movements.push(movement);
 
+    const updatedTitle = { 
+      ...titles[titleIndex], 
+      status: titles[titleIndex].side === 'receber' ? ('recebido' as const) : ('pago' as const),
+      settledAt: paymentDate,
+      settlementMovementId: movementId
+    };
+    titles[titleIndex] = updatedTitle;
+
     return { updatedTitle, movement };
+  }
+
+  async undoSettleTitle(titleId: string): Promise<{ updatedTitle: Title }> {
+    await delay(300);
+    const titleIndex = titles.findIndex(t => t.id === titleId);
+    if (titleIndex === -1) throw new Error('Title not found');
+    
+    // Find movements to delete
+    const movsToDelete = movements.filter(m => m.titleId === titleId);
+    if (movsToDelete.length === 0) {
+      throw new Error('Não há baixa para estornar (nenhuma movimentação encontrada).');
+    }
+    
+    // Remove movements
+    for (let i = movements.length - 1; i >= 0; i--) {
+      if (movements[i].titleId === titleId) {
+        movements.splice(i, 1);
+      }
+    }
+    
+    // Update title
+    const updatedTitle: Title = {
+      ...titles[titleIndex],
+      status: 'previsto',
+      settledAt: undefined,
+      settlementMovementId: undefined
+    };
+    titles[titleIndex] = updatedTitle;
+    
+    return { updatedTitle };
+  }
+
+  async deleteTitle(titleId: string): Promise<void> {
+    await delay(300);
+    const titleIndex = titles.findIndex(t => t.id === titleId);
+    if (titleIndex === -1) throw new Error('Title not found');
+    
+    const title = titles[titleIndex];
+    if (title.status === 'pago' || title.status === 'recebido') {
+      throw new Error('Não é possível excluir: título já liquidado.');
+    }
+    
+    const hasMovements = movements.some(m => m.titleId === titleId);
+    if (hasMovements) {
+      throw new Error('Não é possível excluir: título possui movimentações.');
+    }
+    
+    titles.splice(titleIndex, 1);
+    
+    const hasOtherTitles = titles.some(t => t.documentId === title.documentId);
+    if (!hasOtherTitles) {
+      const docIndex = documents.findIndex(d => d.id === title.documentId);
+      if (docIndex !== -1) documents.splice(docIndex, 1);
+    }
   }
 
   async updateInitialBalance(accountId: string, value: number): Promise<BankAccount> {
@@ -109,41 +250,71 @@ export class MockFinanceService implements IFinanceService {
   // --- CATALOGS CRUD ---
   async createCategory(payload: Omit<Category, 'id'>): Promise<Category> {
     await delay(300);
-    const newCategory = { ...payload, id: uid() };
+    const newCategory: Category = { ...payload, id: uid(), isActive: payload.isActive ?? true };
     categories.push(newCategory);
     return newCategory;
+  }
+
+  async updateCategory(id: string, payload: Partial<Omit<Category, 'id'>>): Promise<Category> {
+    await delay(300);
+    const idx = categories.findIndex(c => c.id === id);
+    if (idx === -1) throw new Error('Category not found');
+    categories[idx] = { ...categories[idx], ...payload };
+    return categories[idx];
   }
 
   async deleteCategory(id: string): Promise<void> {
     await delay(300);
     const idx = categories.findIndex(c => c.id === id);
-    if (idx !== -1) categories.splice(idx, 1);
+    if (idx !== -1) categories[idx] = { ...categories[idx], isActive: false };
   }
 
   async createAccount(payload: Omit<BankAccount, 'id'>): Promise<BankAccount> {
     await delay(300);
-    const newAccount = { ...payload, id: uid() };
+    const newAccount: BankAccount = { 
+      ...payload, 
+      id: uid(),
+      openingBalance: payload.openingBalance ?? payload.initialBalance,
+      openingBalanceDate: payload.openingBalanceDate ?? null,
+      isActive: payload.isActive ?? true
+    };
     accounts.push(newAccount);
     return newAccount;
+  }
+
+  async updateAccount(id: string, payload: Partial<Omit<BankAccount, 'id'>>): Promise<BankAccount> {
+    await delay(300);
+    const idx = accounts.findIndex(a => a.id === id);
+    if (idx === -1) throw new Error('Account not found');
+    accounts[idx] = { ...accounts[idx], ...payload };
+    return accounts[idx];
   }
 
   async deleteAccount(id: string): Promise<void> {
     await delay(300);
     const idx = accounts.findIndex(a => a.id === id);
-    if (idx !== -1) accounts.splice(idx, 1);
+    if (idx !== -1) accounts[idx] = { ...accounts[idx], isActive: false };
   }
 
   async createContact(payload: Omit<Contact, 'id'>): Promise<Contact> {
     await delay(300);
-    const newContact = { ...payload, id: uid() };
+    const newContact: Contact = { ...payload, id: uid(), isActive: payload.isActive ?? true };
     contacts.push(newContact);
     return newContact;
+  }
+
+  async updateContact(id: string, payload: Partial<Omit<Contact, 'id'>>): Promise<Contact> {
+    await delay(300);
+    const idx = contacts.findIndex(c => c.id === id);
+    if (idx === -1) throw new Error('Contact not found');
+    contacts[idx] = { ...contacts[idx], ...payload };
+    return contacts[idx];
   }
 
   async deleteContact(id: string): Promise<void> {
     await delay(300);
     const idx = contacts.findIndex(c => c.id === id);
-    if (idx !== -1) contacts.splice(idx, 1);
+    if (idx !== -1) contacts[idx] = { ...contacts[idx], isActive: false };
   }
 }
 

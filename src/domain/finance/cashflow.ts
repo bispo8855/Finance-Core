@@ -13,6 +13,7 @@ export interface CashflowResult {
   totalEntradas: number;
   totalSaidas: number;
   saldoFinal: number;
+  hasMissingOpeningDates: boolean;
 }
 
 export function calculateCashflow({
@@ -31,18 +32,47 @@ export function calculateCashflow({
   initialBalancesOverride?: Record<string, number>;
 }): CashflowResult {
   let currentBalance = 0;
+  let hasMissingOpeningDates = false;
+
   if (initialBalancesOverride) {
     currentBalance = Object.values(initialBalancesOverride).reduce((sum, v) => sum + v, 0);
   } else {
-    currentBalance = accounts.reduce((acc, a) => acc + a.initialBalance, 0);
-    const priorMovements = movements.filter(m => m.paymentDate < startDateISO);
-    currentBalance += priorMovements.reduce((acc, m) => acc + (m.type === 'entrada' ? m.valuePaid : -m.valuePaid), 0);
+    for (const account of accounts) {
+      if (!account.openingBalanceDate) hasMissingOpeningDates = true;
+      const openDate = account.openingBalanceDate || '1970-01-01';
+      
+      if (openDate <= startDateISO) {
+        currentBalance += account.openingBalance;
+        
+        const accountPriorMovements = movements.filter(m => 
+          m.accountId === account.id && 
+          m.paymentDate >= openDate && 
+          m.paymentDate < startDateISO
+        );
+        
+        const movementsSum = accountPriorMovements.reduce((sum, m) => 
+          sum + (m.type === 'entrada' ? m.valuePaid : -m.valuePaid), 0
+        );
+        currentBalance += movementsSum;
+      }
+    }
   }
 
   const lines: CashflowLine[] = [];
   const start = new Date(startDateISO + 'T12:00:00');
   
   const moveMap = new Map<string, { entradas: number; saidas: number }>();
+  
+  // Apply future opening balances as inflows/outflows
+  for (const account of accounts) {
+    const openDate = account.openingBalanceDate || '1970-01-01';
+    if (openDate > startDateISO) {
+      if (!moveMap.has(openDate)) moveMap.set(openDate, { entradas: 0, saidas: 0 });
+      const curr = moveMap.get(openDate)!;
+      if (account.openingBalance > 0) curr.entradas += account.openingBalance;
+      else if (account.openingBalance < 0) curr.saidas += Math.abs(account.openingBalance);
+    }
+  }
   const titleMap = new Map<string, { entradas: number; saidas: number }>();
 
   for (const m of movements) {
@@ -55,15 +85,12 @@ export function calculateCashflow({
   }
 
   for (const t of titles) {
-    if (t.status === 'previsto' || t.status === 'atrasado') {
-      let dDate = t.dueDate;
-      if (t.status === 'atrasado' && dDate < startDateISO) {
-        dDate = startDateISO; // Projetar títulos atrasados para o primeiro dia visível
-      }
+    if (t.status === 'previsto') {
+      const dDate = t.dueDate;
       if (dDate >= startDateISO) {
         if (!titleMap.has(dDate)) titleMap.set(dDate, { entradas: 0, saidas: 0 });
         const curr = titleMap.get(dDate)!;
-        if (t.type === 'receber') curr.entradas += t.value;
+        if (t.side === 'receber') curr.entradas += t.value;
         else curr.saidas += t.value;
       }
     }
@@ -108,5 +135,5 @@ export function calculateCashflow({
   const totalSaidas = lines.reduce((acc, l) => acc + l.saidas, 0);
   const saldoFinal = currentBalance;
 
-  return { lines, alertas, totalEntradas, totalSaidas, saldoFinal };
+  return { lines, alertas, totalEntradas, totalSaidas, saldoFinal, hasMissingOpeningDates };
 }

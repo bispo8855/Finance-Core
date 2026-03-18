@@ -2,16 +2,14 @@ import { Title, FinancialDocument, Movement, Category, BankAccount } from '@/typ
 import { deriveStatus } from './status';
 
 export interface DashboardKPIs {
-  receitaMes: number;
-  despesaMes: number;
-  resultado: number;
-  saldo: number;
-  aReceber30: number;
-  aPagar30: number;
-  vencidosReceber: number;
-  vencidosPagar: number;
-  topCategoria: [string, number] | null;
-  alerts: string[];
+  saldoDisponivelHoje: number;
+  aReceberPrevisto: number;
+  aPagarPrevisto: number;
+  saldoProjetadoFinal: number;
+  aReceberVencido: number;
+  aPagarVencido: number;
+  totalProximosVencimentos: number; // Represents the count of upcoming titles
+  projectedBalanceData: Array<{ date: string; shortDate: string; balance: number }>;
   upcomingTitles: Title[];
 }
 
@@ -31,62 +29,79 @@ export function calculateDashboardKPIs({
   referenceDateISO: string;
 }): DashboardKPIs {
   
-  let saldo = accounts.reduce((acc, a) => acc + a.initialBalance, 0);
-  saldo += movements.reduce((acc, m) => acc + (m.type === 'entrada' ? m.valuePaid : -m.valuePaid), 0);
+  let saldoDisponivelHoje = 0;
+  for (const a of accounts) {
+    const openDate = a.openingBalanceDate || '1970-01-01';
+    if (openDate <= referenceDateISO) {
+      let accountBal = a.openingBalance;
+      movements.filter(m => m.accountId === a.id && m.paymentDate >= openDate && m.paymentDate <= referenceDateISO).forEach(m => {
+        if (m.type === 'entrada') accountBal += m.valuePaid;
+        else accountBal -= m.valuePaid;
+      });
+      saldoDisponivelHoje += accountBal;
+    }
+  }
   
-  const virtualTitles = titles.map(t => ({ ...t, status: deriveStatus(t, referenceDateISO) }));
-  const monthTitles = virtualTitles.filter(t => t.dueDate.startsWith(monthISO));
+  const aReceberPrevisto = titles
+    .filter(t => t.side === 'receber' && t.status === 'previsto' && t.dueDate >= referenceDateISO)
+    .reduce((acc, t) => acc + t.value, 0);
 
-  const receitaMes = monthTitles.filter(t => t.type === 'receber').reduce((acc, t) => acc + t.value, 0);
-  const despesaMes = monthTitles.filter(t => t.type === 'pagar').reduce((acc, t) => acc + t.value, 0);
-  const resultado = receitaMes - despesaMes;
+  const aPagarPrevisto = titles
+    .filter(t => t.side === 'pagar' && t.status === 'previsto' && t.dueDate >= referenceDateISO)
+    .reduce((acc, t) => acc + t.value, 0);
 
+  const saldoProjetadoFinal = saldoDisponivelHoje + aReceberPrevisto - aPagarPrevisto;
+
+  const aReceberVencido = titles
+    .filter(t => t.side === 'receber' && t.status === 'previsto' && t.dueDate < referenceDateISO)
+    .reduce((acc, t) => acc + t.value, 0);
+
+  const aPagarVencido = titles
+    .filter(t => t.side === 'pagar' && t.status === 'previsto' && t.dueDate < referenceDateISO)
+    .reduce((acc, t) => acc + t.value, 0);
+
+  const upcomingTitlesList = titles
+    .filter(t => t.status === 'previsto')
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  const totalProximosVencimentos = upcomingTitlesList.length;
+
+  const upcomingTitles = upcomingTitlesList.slice(0, 10);
+
+  let currentBalance = saldoDisponivelHoje;
+  const projectedBalanceData = [];
+  
   const refDate = new Date(referenceDateISO + 'T12:00:00');
-  const future30 = new Date(refDate);
-  future30.setDate(future30.getDate() + 30);
-  const future30Str = future30.toISOString().split('T')[0];
+  for (let i = 0; i <= 30; i++) {
+    const curDate = new Date(refDate);
+    curDate.setDate(curDate.getDate() + i);
+    const dateStr = curDate.toISOString().split('T')[0];
 
-  const futurePending = virtualTitles.filter(t => 
-    ['previsto', 'atrasado'].includes(t.status) &&
-    t.dueDate >= referenceDateISO && 
-    t.dueDate <= future30Str
-  );
+    const entradasDia = titles
+      .filter(t => t.side === 'receber' && t.status === 'previsto' && t.dueDate === dateStr)
+      .reduce((acc, t) => acc + t.value, 0);
+    const saidasDia = titles
+      .filter(t => t.side === 'pagar' && t.status === 'previsto' && t.dueDate === dateStr)
+      .reduce((acc, t) => acc + t.value, 0);
 
-  const aReceber30 = futurePending.filter(t => t.type === 'receber').reduce((acc, t) => acc + t.value, 0);
-  const aPagar30 = futurePending.filter(t => t.type === 'pagar').reduce((acc, t) => acc + t.value, 0);
+    currentBalance += (entradasDia - saidasDia);
 
-  const vencidosReceber = virtualTitles.filter(t => t.type === 'receber' && t.status === 'atrasado').reduce((acc, t) => acc + t.value, 0);
-  const vencidosPagar = virtualTitles.filter(t => t.type === 'pagar' && t.status === 'atrasado').reduce((acc, t) => acc + t.value, 0);
-
-  const gastosPorCategoria: Record<string, number> = {};
-  monthTitles.filter(t => t.type === 'pagar').forEach(t => {
-    gastosPorCategoria[t.categoryId] = (gastosPorCategoria[t.categoryId] || 0) + t.value;
-  });
-  const sortedCategorias = Object.entries(gastosPorCategoria).sort((a, b) => b[1] - a[1]);
-  const topCategoria = sortedCategorias.length > 0 ? sortedCategorias[0] : null;
-
-  const alerts: string[] = [];
-  if (vencidosReceber > 0) alerts.push(`Você tem R$ ${vencidosReceber.toLocaleString('pt-BR', {minimumFractionDigits:2})} vencido a receber`);
-  if (vencidosPagar > 0) alerts.push(`Você tem R$ ${vencidosPagar.toLocaleString('pt-BR', {minimumFractionDigits:2})} vencido a pagar`);
-  if (saldo < 0) alerts.push('Saldo consolidado está negativo!');
-  if (saldo - aPagar30 < 0) alerts.push('Saldo projetado pode ficar negativo nos próximos 30 dias');
-
-  const upcomingTitles = virtualTitles
-    .filter(t => ['previsto', 'atrasado'].includes(t.status))
-    .sort((a, b) => a.dueDate.localeCompare(b.dueDate))
-    .slice(0, 10);
+    projectedBalanceData.push({
+      date: dateStr,
+      shortDate: `${dateStr.substring(8, 10)}/${dateStr.substring(5, 7)}`,
+      balance: currentBalance
+    });
+  }
 
   return {
-    receitaMes,
-    despesaMes,
-    resultado,
-    saldo,
-    aReceber30,
-    aPagar30,
-    vencidosReceber,
-    vencidosPagar,
-    topCategoria,
-    alerts,
+    saldoDisponivelHoje,
+    aReceberPrevisto,
+    aPagarPrevisto,
+    saldoProjetadoFinal,
+    aReceberVencido,
+    aPagarVencido,
+    totalProximosVencimentos,
+    projectedBalanceData,
     upcomingTitles
   };
 }

@@ -4,29 +4,44 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Users, Plus, Trash2 } from 'lucide-react';
-import { ContactType } from '@/types/financial';
-import { useContacts, useCreateContact, useDeleteContact } from '@/hooks/finance/useCatalogs';
+import { Users, Plus, Trash2, Pencil } from 'lucide-react';
+import { ContactType, Contact } from '@/types/financial';
+import { useContacts, useCreateContact, useDeleteContact, useUpdateContact } from '@/hooks/finance/useCatalogs';
+import { ContactFormModal } from '@/components/shared/ContactFormModal';
 
 export default function Contacts() {
   const { contacts } = useContacts();
   const { mutateAsync: addContact, isPending: isAdding } = useCreateContact();
+  const { mutateAsync: updateContact, isPending: isUpdating } = useUpdateContact();
   const { mutateAsync: deleteContact, isPending: isDeleting } = useDeleteContact();
 
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [type, setType] = useState<ContactType>('cliente');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<'create' | 'edit'>('create');
+  const [contactToEdit, setContactToEdit] = useState<Partial<Contact> | undefined>();
+
   const [tab, setTab] = useState<'todos' | 'cliente' | 'fornecedor'>('todos');
 
-  const filtered = tab === 'todos' ? contacts : contacts.filter(c => c.type === tab);
+  const activeContacts = contacts.filter(c => c.isActive !== false);
+  const filtered = tab === 'todos' ? activeContacts : activeContacts.filter(c => c.type === tab);
 
-  const handleAdd = async () => {
-    if (!name.trim()) return;
-    await addContact({ name: name.trim(), type, email: email || undefined, phone: phone || undefined });
-    setName(''); setEmail(''); setPhone('');
-    setOpen(false);
+  const openCreateModal = () => {
+    setModalMode('create');
+    setContactToEdit(undefined);
+    setModalOpen(true);
+  };
+
+  const openEditModal = (contact: Contact) => {
+    setModalMode('edit');
+    setContactToEdit(contact);
+    setModalOpen(true);
+  };
+
+  const handleModalSubmit = async (values: Omit<Contact, 'id'>) => {
+    if (modalMode === 'create') {
+      await addContact(values);
+    } else if (modalMode === 'edit' && contactToEdit?.id) {
+      await updateContact({ id: contactToEdit.id, payload: values });
+    }
   };
 
   return (
@@ -38,7 +53,7 @@ export default function Contacts() {
           </div>
           <h1 className="text-2xl font-bold">Contatos</h1>
         </div>
-        <Button size="sm" onClick={() => setOpen(true)} className="gap-1.5" disabled={isAdding || isDeleting}>
+        <Button size="sm" onClick={openCreateModal} className="gap-1.5" disabled={isAdding || isUpdating || isDeleting}>
           <Plus className="w-4 h-4" /> Novo Contato
         </Button>
       </div>
@@ -63,13 +78,18 @@ export default function Contacts() {
                     {c.type === 'cliente' ? 'Cliente' : 'Fornecedor'}
                   </span>
                 </div>
-                {(c.email || c.phone) && (
-                  <p className="text-xs text-muted-foreground">{[c.email, c.phone].filter(Boolean).join(' · ')}</p>
+                {(c.document || c.email || c.phone) && (
+                  <p className="text-xs text-muted-foreground">{[c.document, c.email, c.phone].filter(Boolean).join(' · ')}</p>
                 )}
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteContact(c.id)} disabled={isDeleting}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => openEditModal(c)} disabled={isDeleting || isUpdating}>
+                  <Pencil className="w-4 h-4" />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-negative" onClick={() => deleteContact(c.id)} disabled={isDeleting || isUpdating}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           ))}
           {filtered.length === 0 && (
@@ -78,39 +98,14 @@ export default function Contacts() {
         </div>
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Novo Contato</DialogTitle></DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Nome</Label>
-              <Input value={name} onChange={e => setName(e.target.value)} placeholder="Nome do contato" disabled={isAdding} />
-            </div>
-            <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={type} onValueChange={v => setType(v as ContactType)} disabled={isAdding}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cliente">Cliente</SelectItem>
-                  <SelectItem value="fornecedor">Fornecedor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>E-mail</Label>
-              <Input value={email} onChange={e => setEmail(e.target.value)} placeholder="email@exemplo.com" disabled={isAdding} />
-            </div>
-            <div className="space-y-2">
-              <Label>Telefone</Label>
-              <Input value={phone} onChange={e => setPhone(e.target.value)} placeholder="(11) 99999-9999" disabled={isAdding} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)} disabled={isAdding}>Cancelar</Button>
-            <Button onClick={handleAdd} disabled={isAdding}>Salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ContactFormModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        mode={modalMode}
+        initialValues={contactToEdit}
+        onSubmit={handleModalSubmit}
+        isPending={isAdding || isUpdating}
+      />
     </div>
   );
 }

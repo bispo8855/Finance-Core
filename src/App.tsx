@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
 import NewDocument from "./pages/NewDocument";
@@ -14,14 +14,34 @@ import Accounts from "./pages/Accounts";
 import Contacts from "./pages/Contacts";
 import SettingsPage from "./pages/SettingsPage";
 import NotFound from "./pages/NotFound";
+import Login from "./pages/Login";
+import ResetPassword from "./pages/ResetPassword";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+
+const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { session, isLoading } = useAuth();
+  
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center p-4">Carregando sessão...</div>;
+  }
+  
+  if (!session) {
+    return <Navigate to="/login" replace />;
+  }
+
+  return <>{children}</>;
+};
 
 const App = () => (
+  <AuthProvider>
     <TooltipProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route element={<AppLayout />}>
+            <Route path="/login" element={<Login />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
               <Route path="/" element={<Dashboard />} />
               <Route path="/lancar" element={<NewDocument />} />
               <Route path="/receber" element={<Receivables />} />
@@ -37,6 +57,7 @@ const App = () => (
           </Routes>
         </BrowserRouter>
     </TooltipProvider>
+  </AuthProvider>
 );
 
 export default App;

@@ -1,5 +1,5 @@
-import { financeService as mockService } from './mockFinanceService';
+import { supabaseFinanceService } from './supabaseFinanceService';
 import { IFinanceService } from './financeService';
 
-// Proxy definition to allow easily swapping out implementations in the future (e.g. SupabaseService)
-export const financeService: IFinanceService = mockService;
+// Proxy definition firmly set to use Supabase Service 100% of the time
+export const financeService: IFinanceService = supabaseFinanceService;
