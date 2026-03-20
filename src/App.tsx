@@ -8,6 +8,7 @@ import NewDocument from "./pages/NewDocument";
 import Receivables from "./pages/Receivables";
 import Payables from "./pages/Payables";
 import CashFlow from "./pages/CashFlow";
+import Transactions from "./pages/Transactions";
 import DREPage from "./pages/DREPage";
 import Categories from "./pages/Categories";
 import Accounts from "./pages/Accounts";
@@ -46,6 +47,7 @@ const App = () => (
               <Route path="/lancar" element={<NewDocument />} />
               <Route path="/receber" element={<Receivables />} />
               <Route path="/pagar" element={<Payables />} />
+              <Route path="/lancamentos" element={<Transactions />} />
               <Route path="/fluxo" element={<CashFlow />} />
               <Route path="/dre" element={<DREPage />} />
               <Route path="/categorias" element={<Categories />} />

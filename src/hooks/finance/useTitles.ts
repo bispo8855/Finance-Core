@@ -9,8 +9,7 @@ export function useTitles(type: 'receber' | 'pagar') {
     select: (snapshot) => {
       const todayStr = new Date().toISOString().split('T')[0];
       const virtualTitles = snapshot.titles.map(t => ({
-        ...t,
-        status: deriveStatus(t, todayStr)
+        ...t
       }));
       return virtualTitles.filter(t => t.side === type);
     },

@@ -33,10 +33,16 @@ export interface IFinanceService {
     titleId: string, 
     accountId: string, 
     paymentDate: string, 
-    valuePaid: number
+    valuePaid: number,
+    notes?: string
   ): Promise<{ updatedTitle: Title; movement: Movement }>;
   
   undoSettleTitle(titleId: string): Promise<{ updatedTitle: Title }>;
+  
+  updateTitle(
+    titleId: string,
+    payload: { dueDate?: string; description?: string }
+  ): Promise<Title>;
   
   updateInitialBalance(accountId: string, value: number): Promise<BankAccount>;
 
@@ -52,4 +58,5 @@ export interface IFinanceService {
   deleteContact(id: string): Promise<void>;
   
   deleteTitle(titleId: string): Promise<void>;
+  deleteDocument(documentId: string): Promise<void>;
 }

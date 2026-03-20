@@ -250,17 +250,19 @@ export class SupabaseFinanceService implements IFinanceService {
     };
   }
 
-  async settleTitle(titleId: string, accountId: string, paymentDate: string, valuePaid: number) {
+  async settleTitle(titleId: string, accountId: string, paymentDate: string, valuePaid: number, notes?: string) {
     console.log("SUPABASE SERVICE ATIVO - settleTitle");
     const userId = await this.getUserId();
-    // 1. Atualizar o Titulo (pode checar status parcial depois, mas no mock assume recebido)
     const { data: titleData, error: titleFetchError } = await supabase.from('titles').select('*').eq('id', titleId).single();
     if (titleFetchError) throw titleFetchError;
 
     const currentTitle = this.mapTitle(titleData);
     const newStatus = currentTitle.side === 'receber' ? 'recebido' : 'pago';
 
-    // 2. Inserir Movement
+    const isPartial = valuePaid < currentTitle.value;
+    const remainingValue = currentTitle.value - valuePaid;
+
+    // 1. Inserir Movement
     const { data: newMovementData, error: movementError } = await supabase
       .from('movements')
       .insert({
@@ -270,25 +272,46 @@ export class SupabaseFinanceService implements IFinanceService {
         payment_date: paymentDate,
         paid_amount: valuePaid,
         fee_amount: 0,
-        notes: null
+        notes: notes || null
       })
       .select()
       .single();
 
     if (movementError) throw movementError;
 
+    // 2. Atualizar o Titulo atual
     const { data: updatedTitleData, error: titleUpdateError } = await supabase
       .from('titles')
       .update({ 
         status: newStatus,
         settled_at: paymentDate,
-        settlement_movement_id: newMovementData.id
+        settlement_movement_id: newMovementData.id,
+        amount: isPartial ? valuePaid : currentTitle.value
       })
       .eq('id', titleId)
       .select()
       .single();
 
     if (titleUpdateError) throw titleUpdateError;
+
+    // 3. Se for parcial, criar novo Titulo com o restante
+    if (isPartial && remainingValue > 0) {
+      const { error: newTitleError } = await supabase
+        .from('titles')
+        .insert({
+          user_id: userId,
+          document_id: currentTitle.documentId,
+          side: currentTitle.side,
+          installment_num: currentTitle.installment,
+          installment_total: currentTitle.totalInstallments,
+          due_date: currentTitle.dueDate,
+          amount: remainingValue,
+          status: 'previsto'
+        });
+      if (newTitleError) {
+        console.error('Erro ao gerar parcela restante', newTitleError);
+      }
+    }
 
     return {
       updatedTitle: this.mapTitle(updatedTitleData),
@@ -351,6 +374,30 @@ export class SupabaseFinanceService implements IFinanceService {
     };
   }
 
+  async updateTitle(titleId: string, payload: { dueDate?: string; description?: string }): Promise<Title> {
+    console.log("SUPABASE SERVICE ATIVO - updateTitle");
+    const userId = await this.getUserId();
+
+    const updateData: Record<string, unknown> = {};
+    if (payload.dueDate !== undefined) updateData.due_date = payload.dueDate;
+    if (payload.description !== undefined) updateData.description = payload.description;
+
+    const { data, error } = await supabase
+      .from('titles')
+      .update(updateData)
+      .eq('id', titleId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      throw new Error('Erro ao atualizar título no Supabase.');
+    }
+
+    return this.mapTitle(data);
+  }
+
   async deleteTitle(titleId: string): Promise<void> {
     console.log("SUPABASE SERVICE ATIVO - deleteTitle");
     const userId = await this.getUserId();
@@ -404,6 +451,74 @@ export class SupabaseFinanceService implements IFinanceService {
 
     if (!countError && titlesCount === 0) {
       await supabase.from('documents').delete().eq('id', title.document_id).eq('user_id', userId);
+    }
+  }
+
+  async deleteDocument(documentId: string): Promise<void> {
+    console.log("SUPABASE SERVICE ATIVO - deleteDocument");
+    const userId = await this.getUserId();
+
+    // 1. Fetch titles for the document to check statuses
+    const { data: titles, error: titlesError } = await supabase
+      .from('titles')
+      .select('id, status')
+      .eq('document_id', documentId);
+
+    if (titlesError) {
+      console.error(titlesError);
+      throw new Error('Erro ao buscar títulos do documento para exclusão.');
+    }
+
+    if (!titles || titles.length === 0) {
+      // no titles, maybe document is empty, just delete document
+      const { error: docError } = await supabase.from('documents').delete().eq('id', documentId).eq('user_id', userId);
+      if (docError) throw new Error('Erro ao excluir documento.');
+      return;
+    }
+
+    const hasSettled = titles.some(t => t.status === 'pago' || t.status === 'recebido');
+    if (hasSettled) {
+      throw new Error('Este lançamento possui parcelas baixadas. Estorne as baixas primeiro para poder excluí-lo.');
+    }
+
+    const titleIds = titles.map(t => t.id);
+
+    // 2. Check if any has movements
+    const { count, error: movError } = await supabase
+      .from('movements')
+      .select('*', { count: 'exact', head: true })
+      .in('title_id', titleIds);
+
+    if (movError) {
+      console.error(movError);
+      throw new Error('Erro ao verificar movimentações das parcelas.');
+    }
+    if (count && count > 0) {
+      throw new Error('Não é possível excluir: existem movimentações vinculadas às parcelas.');
+    }
+
+    // 3. Delete titles
+    const { error: deleteTitlesError } = await supabase
+      .from('titles')
+      .delete()
+      .in('id', titleIds)
+      .eq('user_id', userId);
+
+    if (deleteTitlesError) {
+      console.error(deleteTitlesError);
+      throw new Error('Erro ao excluir títulos no Supabase.');
+    }
+
+    // 4. Delete document
+    const { error: deleteDocError } = await supabase
+      .from('documents')
+      .delete()
+      .eq('id', documentId)
+      .eq('user_id', userId);
+
+    if (deleteDocError) {
+      console.error(deleteDocError);
+      throw new Error('Erro ao excluir documento no Supabase.');
     }
   }
 
@@ -601,7 +716,7 @@ export class SupabaseFinanceService implements IFinanceService {
       value: Number(row.amount),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       status: row.status as any,
-      description: `Parcela ${row.installment_num}/${row.installment_total}`,
+      description: row.description || '',
       categoryId: '',
       contactId: '',
       settledAt: row.settled_at || undefined,

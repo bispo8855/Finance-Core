@@ -11,7 +11,7 @@ const statusConfig: Record<TitleStatus, { label: string; className: string }> = 
 };
 
 export function StatusBadge({ status }: { status: TitleStatus }) {
-  const config = statusConfig[status];
+  const config = statusConfig[status] || statusConfig['previsto'];
   return (
     <span className={cn('inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium', config.className)}>
       {config.label}

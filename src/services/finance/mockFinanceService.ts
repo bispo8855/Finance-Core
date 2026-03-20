@@ -54,7 +54,7 @@ export class MockFinanceService implements IFinanceService {
         side: titleType,
         contactId: payload.contactId,
         categoryId: payload.categoryId,
-        description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
+        description: '', // We leave it empty so the UI falls back to Document description
       };
       newTitles.push(title);
 
@@ -125,7 +125,7 @@ export class MockFinanceService implements IFinanceService {
           side: titleType,
           contactId: payload.contactId,
           categoryId: payload.categoryId,
-          description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
+          description: '',
         };
         newTitles.push(title);
       }
@@ -145,7 +145,7 @@ export class MockFinanceService implements IFinanceService {
           side: titleType,
           contactId: payload.contactId,
           categoryId: payload.categoryId,
-          description: payload.description + (numInstallments > 1 ? ` ${i + 1}/${numInstallments}` : ''),
+          description: '',
         };
         newTitles.push(title);
       }
@@ -156,10 +156,14 @@ export class MockFinanceService implements IFinanceService {
     return { document: updatedDoc, titles: newTitles };
   }
 
-  async settleTitle(titleId: string, accountId: string, paymentDate: string, valuePaid: number) {
+  async settleTitle(titleId: string, accountId: string, paymentDate: string, valuePaid: number, notes?: string) {
     await delay(300);
     const titleIndex = titles.findIndex(t => t.id === titleId);
     if (titleIndex === -1) throw new Error('Title not found');
+
+    const currentTitle = titles[titleIndex];
+    const isPartial = valuePaid < currentTitle.value;
+    const remainingValue = currentTitle.value - valuePaid;
 
     const movementId = uid();
     const movement: Movement = {
@@ -168,19 +172,32 @@ export class MockFinanceService implements IFinanceService {
       accountId,
       paymentDate,
       valuePaid,
-      type: titles[titleIndex].side === 'receber' ? 'entrada' : 'saida',
+      type: currentTitle.side === 'receber' ? 'entrada' : 'saida',
       feeAmount: 0,
-      notes: ''
+      notes: notes || ''
     };
     movements.push(movement);
 
     const updatedTitle = { 
-      ...titles[titleIndex], 
-      status: titles[titleIndex].side === 'receber' ? ('recebido' as const) : ('pago' as const),
+      ...currentTitle, 
+      value: isPartial ? valuePaid : currentTitle.value,
+      status: currentTitle.side === 'receber' ? ('recebido' as const) : ('pago' as const),
       settledAt: paymentDate,
       settlementMovementId: movementId
     };
     titles[titleIndex] = updatedTitle;
+
+    if (isPartial && remainingValue > 0) {
+      const newTitle: Title = {
+        ...currentTitle,
+        id: uid(),
+        value: remainingValue,
+        status: 'previsto',
+        settledAt: undefined,
+        settlementMovementId: undefined
+      };
+      titles.push(newTitle);
+    }
 
     return { updatedTitle, movement };
   }
@@ -215,6 +232,19 @@ export class MockFinanceService implements IFinanceService {
     return { updatedTitle };
   }
 
+  async updateTitle(titleId: string, payload: { dueDate?: string; description?: string }): Promise<Title> {
+    await delay(300);
+    const titleIndex = titles.findIndex(t => t.id === titleId);
+    if (titleIndex === -1) throw new Error('Title not found');
+
+    const updatedTitle = { ...titles[titleIndex] };
+    if (payload.dueDate !== undefined) updatedTitle.dueDate = payload.dueDate;
+    if (payload.description !== undefined) updatedTitle.description = payload.description;
+
+    titles[titleIndex] = updatedTitle;
+    return updatedTitle;
+  }
+
   async deleteTitle(titleId: string): Promise<void> {
     await delay(300);
     const titleIndex = titles.findIndex(t => t.id === titleId);
@@ -237,6 +267,34 @@ export class MockFinanceService implements IFinanceService {
       const docIndex = documents.findIndex(d => d.id === title.documentId);
       if (docIndex !== -1) documents.splice(docIndex, 1);
     }
+  }
+
+  async deleteDocument(documentId: string): Promise<void> {
+    await delay(300);
+    const docIndex = documents.findIndex(d => d.id === documentId);
+    if (docIndex === -1) throw new Error('Documento não encontrado.');
+
+    const docTitles = titles.filter(t => t.documentId === documentId);
+    
+    if (docTitles.some(t => t.status === 'pago' || t.status === 'recebido')) {
+      throw new Error('Este lançamento possui parcelas baixadas. Estorne as baixas primeiro para poder excluí-lo.');
+    }
+
+    const titleIds = docTitles.map(t => t.id);
+    const hasMovements = movements.some(m => titleIds.includes(m.titleId));
+    if (hasMovements) {
+      throw new Error('Não é possível excluir: existem movimentações vinculadas às parcelas.');
+    }
+
+    // Delete titles
+    for (let i = titles.length - 1; i >= 0; i--) {
+      if (titles[i].documentId === documentId) {
+        titles.splice(i, 1);
+      }
+    }
+
+    // Delete document
+    documents.splice(docIndex, 1);
   }
 
   async updateInitialBalance(accountId: string, value: number): Promise<BankAccount> {

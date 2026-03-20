@@ -179,7 +179,9 @@ export default function Dashboard() {
         <div className="divide-y">
           {upcomingTitles.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">Nenhum título pendente.</p>
-          ) : upcomingTitles.map(t => (
+          ) : upcomingTitles.map(t => {
+            const currentStatus = (t.status === 'previsto' && t.dueDate < todayStr) ? 'atrasado' : t.status;
+            return (
             <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="space-y-0.5 min-w-0">
@@ -188,17 +190,20 @@ export default function Dashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                <StatusBadge status={t.status} />
-                {t.status === 'atrasado' && (
+                <StatusBadge status={currentStatus as Title['status']} />
+                {currentStatus === 'atrasado' && (
                   <span className="text-xs text-negative font-medium">{daysOverdue(t.dueDate)}d</span>
                 )}
                 <span className="text-sm font-semibold w-28 text-right">{fmt(t.value)}</span>
-                <Button size="sm" variant="outline" className="text-xs" onClick={() => setPayTitle(t)}>
-                  Baixar
-                </Button>
+                {t.status === 'previsto' && (
+                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setPayTitle(t)}>
+                    Baixar
+                  </Button>
+                )}
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

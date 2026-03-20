@@ -23,12 +23,14 @@ export function PaymentModal({ title, open, onClose }: PaymentModalProps) {
   const [accountId, setAccountId] = useState('');
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
   const [valuePaid, setValuePaid] = useState('');
+  const [notes, setNotes] = useState('');
 
   const handleOpen = () => {
     if (title) {
       setValuePaid(title.value.toFixed(2));
       setPaymentDate(new Date().toISOString().split('T')[0]);
       setAccountId(accounts[0]?.id ?? '');
+      setNotes('');
     }
   };
 
@@ -39,7 +41,8 @@ export function PaymentModal({ title, open, onClose }: PaymentModalProps) {
         titleId: title.id,
         accountId,
         paymentDate,
-        valuePaid: parseFloat(valuePaid)
+        valuePaid: parseFloat(valuePaid),
+        notes: notes.trim() || undefined
       });
       onClose();
     } catch (e) {
@@ -77,6 +80,10 @@ export function PaymentModal({ title, open, onClose }: PaymentModalProps) {
             <div className="space-y-2">
               <Label>Valor pago (R$)</Label>
               <Input type="number" step="0.01" value={valuePaid} onChange={e => setValuePaid(e.target.value)} disabled={isPending} />
+            </div>
+            <div className="space-y-2">
+              <Label>Observação (Opcional)</Label>
+              <Input type="text" placeholder="Ex: Pago via PIX" value={notes} onChange={e => setNotes(e.target.value)} disabled={isPending} />
             </div>
           </div>
         )}

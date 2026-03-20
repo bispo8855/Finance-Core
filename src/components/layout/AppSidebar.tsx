@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, FilePlus, ArrowDownToLine, ArrowUpFromLine,
-  TrendingUp, BarChart3, Tags, Building2, Users, Settings, DollarSign, LogOut,
+  TrendingUp, BarChart3, Tags, Building2, Users, Settings, DollarSign, LogOut, History
 } from 'lucide-react';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -16,6 +16,7 @@ const mainNav = [
   { title: 'Lançar', url: '/lancar', icon: FilePlus },
   { title: 'Contas a Receber', url: '/receber', icon: ArrowDownToLine },
   { title: 'Contas a Pagar', url: '/pagar', icon: ArrowUpFromLine },
+  { title: 'Lançamentos', url: '/lancamentos', icon: History },
   { title: 'Fluxo de Caixa', url: '/fluxo', icon: TrendingUp },
   { title: 'DRE', url: '/dre', icon: BarChart3 },
 ];
