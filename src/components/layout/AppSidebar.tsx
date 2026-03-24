@@ -1,7 +1,8 @@
 import {
   LayoutDashboard, FilePlus, ArrowDownToLine, ArrowUpFromLine,
-  TrendingUp, BarChart3, Tags, Building2, Users, Settings, DollarSign, LogOut, History
+  TrendingUp, BarChart3, Tags, Building2, Users, Settings, LogOut, History
 } from 'lucide-react';
+import { AppBrand } from '@/components/shared/AppBrand';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,17 +38,7 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="px-4 py-5">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0">
-            <DollarSign className="w-4 h-4 text-sidebar-primary-foreground" />
-          </div>
-          {!collapsed && (
-            <div className="flex flex-col">
-              <span className="text-sm font-bold text-sidebar-accent-foreground">FinançasPRO</span>
-              <span className="text-[10px] text-sidebar-foreground/50">Gestão Financeira</span>
-            </div>
-          )}
-        </div>
+        <AppBrand collapsed={collapsed} />
       </SidebarHeader>
 
       <SidebarContent>

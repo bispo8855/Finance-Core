@@ -6,7 +6,7 @@ import { PaymentModal } from '@/components/shared/PaymentModal';
 import { Button } from '@/components/ui/button';
 import { Title } from '@/types/financial';
 import {
-  DollarSign, TrendingUp, TrendingDown, ArrowDownToLine,
+  TrendingUp, TrendingDown, ArrowDownToLine,
   ArrowUpFromLine, AlertTriangle, CreditCard, Plus, Clock, Info
 } from 'lucide-react';
 import { useDashboard } from '@/hooks/finance/useDashboard';
@@ -68,25 +68,25 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard 
-          title="Saldo Disponível Hoje" 
+          title="Saldo disponível hoje" 
           value={fmt(kpis.saldoDisponivelHoje)} 
           icon={CreditCard} 
           variant={kpis.saldoDisponivelHoje >= 0 ? 'default' : 'negative'} 
         />
         <KPICard 
-          title="A Receber (Previsto)" 
+          title="A receber (previsto)" 
           value={fmt(kpis.aReceberPrevisto)} 
           icon={ArrowDownToLine} 
           variant="positive"
         />
         <KPICard 
-          title="A Pagar (Previsto)" 
+          title="A pagar (previsto)" 
           value={fmt(kpis.aPagarPrevisto)} 
           icon={ArrowUpFromLine} 
           variant="warning" 
         />
         <KPICard 
-          title="Saldo Projetado Final" 
+          title="Saldo projetado final" 
           value={fmt(kpis.saldoProjetadoFinal)} 
           icon={kpis.saldoProjetadoFinal >= 0 ? TrendingUp : TrendingDown} 
           variant={kpis.saldoProjetadoFinal >= 0 ? 'positive' : 'negative'} 

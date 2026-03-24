@@ -25,10 +25,10 @@ const iconBg = {
 
 export function KPICard({ title, value, icon: Icon, variant = 'default', subtitle }: KPICardProps) {
   return (
-    <div className={cn('rounded-xl border p-4 shadow-sm animate-fade-in', variantStyles[variant])}>
+    <div className={cn('rounded-xl border p-6 shadow-sm animate-fade-in', variantStyles[variant])}>
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
           <p className={cn('text-xl font-bold', variant === 'positive' && 'text-positive', variant === 'negative' && 'text-negative')}>
             {value}
           </p>
