@@ -539,7 +539,7 @@ export class SupabaseFinanceService implements IFinanceService {
     const userId = await this.getUserId();
     const { data, error } = await supabase
       .from('categories')
-      .insert({ user_id: userId, name: payload.name, kind: payload.type, is_active: payload.isActive ?? true })
+      .insert({ user_id: userId, name: payload.name, kind: payload.type, dre_classification: payload.dreClassification, is_active: payload.isActive ?? true })
       .select()
       .single();
     if (error) throw error;
@@ -549,7 +549,7 @@ export class SupabaseFinanceService implements IFinanceService {
   async updateCategory(id: string, payload: Partial<Omit<Category, 'id'>>): Promise<Category> {
     const { data, error } = await supabase
       .from('categories')
-      .update({ name: payload.name, kind: payload.type, is_active: payload.isActive })
+      .update({ name: payload.name, kind: payload.type, dre_classification: payload.dreClassification, is_active: payload.isActive })
       .eq('id', id)
       .select()
       .single();
@@ -670,6 +670,7 @@ export class SupabaseFinanceService implements IFinanceService {
       id: row.id,
       name: row.name,
       type: row.kind,
+      dreClassification: row.dre_classification,
       isActive: row.is_active !== false
     };
   }

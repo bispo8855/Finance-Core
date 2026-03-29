@@ -12,6 +12,7 @@ import {
 import { useDashboard } from '@/hooks/finance/useDashboard';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { cn } from '@/lib/utils';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -132,12 +133,16 @@ export default function Dashboard() {
 
       <div className="bg-muted/50 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border">
         <div className="flex items-center gap-2">
-          <div className="bg-secondary p-2 rounded-lg">
-            <Info className="w-5 h-5 text-secondary-foreground" />
+          <div className={cn("p-2 rounded-lg", (kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-500" : "bg-secondary text-secondary-foreground")}>
+            {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
           </div>
           <div>
-            <h3 className="font-semibold text-sm">Atenção</h3>
-            <p className="text-xs text-muted-foreground">Resumo de pendências e títulos vencidos</p>
+            <h3 className="font-semibold text-sm">
+              {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "Atenção Necessária" : "Painel de Avisos"}
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "Existem títulos vencidos aguardando baixa" : "Resumo da sua agenda financeira em aberto"}
+            </p>
           </div>
         </div>
         
@@ -155,7 +160,7 @@ export default function Dashboard() {
             </span>
           </div>
           <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Próximos Vencimentos</span>
+            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Títulos em Aberto</span>
             <span className="text-sm font-bold flex items-center gap-1">
               <Clock className="w-3.5 h-3.5 text-muted-foreground" />
               {kpis.totalProximosVencimentos} {kpis.totalProximosVencimentos === 1 ? 'título' : 'títulos'}
@@ -166,7 +171,7 @@ export default function Dashboard() {
 
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b flex items-center justify-between">
-          <h3 className="font-semibold">Próximos vencimentos</h3>
+          <h3 className="font-semibold">Lista de títulos em aberto</h3>
           <div className="flex gap-1 bg-muted rounded-lg p-0.5">
             <button onClick={() => setTab('receber')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${tab === 'receber' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
               A Receber

@@ -68,7 +68,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('AuthContext: Erro ao fazer signOut no Supabase', error);
+    } finally {
+      setUser(null);
+      setSession(null);
+      // Força o reload para limpar o cache de memória e dados sensíveis (QueryClient, etc)
+      window.location.href = '/login';
+    }
   };
 
   return (

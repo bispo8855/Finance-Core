@@ -22,6 +22,18 @@ export interface DREResult {
   };
 }
 
+function getDreClass(category: Category): string {
+  if (category.dreClassification) return category.dreClassification;
+  switch (category.type) {
+    case 'receita': return 'receita_bruta';
+    case 'custo': return 'custo_variavel';
+    case 'despesa': return 'despesa_fixa';
+    case 'financeiro': return 'financeiro';
+    case 'investimento': return 'investimento';
+    default: return 'outro';
+  }
+}
+
 export function calculateDRE({
   documents,
   categories,
@@ -33,23 +45,31 @@ export function calculateDRE({
 }): DREResult {
   const monthDocs = documents.filter(d => d.competenceDate.startsWith(monthISO));
 
-  const typeTotal = (ctype: string) => monthDocs
-    .filter(d => categories.find(c => c.id === d.categoryId)?.type === ctype)
+  const dreTotal = (dClass: string) => monthDocs
+    .filter(d => {
+      const c = categories.find(cat => cat.id === d.categoryId);
+      return c ? getDreClass(c) === dClass : false;
+    })
     .reduce((acc, d) => acc + d.totalValue, 0);
 
-  const receitaBruta = typeTotal('receita');
-  const deducoes = 0;
+  const receitaBruta = dreTotal('receita_bruta');
+  const deducoes = dreTotal('deducao_imposto');
   const receitaLiquida = receitaBruta - deducoes;
-  const custosVariaveis = typeTotal('custo');
+  const custosVariaveis = dreTotal('custo_variavel');
   const margemContribuicao = receitaLiquida - custosVariaveis;
-  const despesasFixas = typeTotal('despesa');
+  const despesasFixas = dreTotal('despesa_fixa');
   const resultadoOperacional = margemContribuicao - despesasFixas;
-  const financeiro = typeTotal('financeiro');
+  const financeiro = dreTotal('financeiro');
   const resultadoLiquido = resultadoOperacional - financeiro;
 
   const gastosPorCategoria: Record<string, number> = {};
   monthDocs
-    .filter(d => ['custo', 'despesa', 'financeiro'].includes(categories.find(c => c.id === d.categoryId)?.type || ''))
+    .filter(d => {
+      const c = categories.find(cat => cat.id === d.categoryId);
+      if (!c) return false;
+      const dClass = getDreClass(c);
+      return ['custo_variavel', 'despesa_fixa', 'financeiro'].includes(dClass);
+    })
     .forEach(d => {
       gastosPorCategoria[d.categoryId] = (gastosPorCategoria[d.categoryId] || 0) + d.totalValue;
     });

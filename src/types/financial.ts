@@ -2,11 +2,13 @@ export type DocumentType = 'venda' | 'compra' | 'despesa' | 'receita';
 export type TitleStatus = 'previsto' | 'pago' | 'recebido' | 'atrasado' | 'renegociado' | 'cancelado';
 export type ContactType = 'cliente' | 'fornecedor' | 'ambos';
 export type CategoryType = 'receita' | 'custo' | 'despesa' | 'investimento' | 'financeiro';
+export type DREClassification = 'receita_bruta' | 'deducao_imposto' | 'custo_variavel' | 'despesa_fixa' | 'financeiro' | 'investimento' | 'outro';
 
 export interface Category {
   id: string;
   name: string;
   type: CategoryType;
+  dreClassification?: DREClassification;
   isActive?: boolean;
 }
 

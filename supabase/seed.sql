@@ -20,42 +20,46 @@ BEGIN
   VALUES (gen_random_uuid(), p_user_id, 'Banco Principal', 0.00);
 
   -- 2) CATEGORIAS PADRÃO
-  INSERT INTO categories (id, user_id, name, kind)
+  INSERT INTO categories (id, user_id, name, kind, dre_classification)
   VALUES 
     -- Receitas
-    (gen_random_uuid(), p_user_id, 'Venda de Produtos', 'receita'),
-    (gen_random_uuid(), p_user_id, 'Prestação de Serviços', 'receita'),
-    (gen_random_uuid(), p_user_id, 'Receitas Avulsas', 'receita'),
-    (gen_random_uuid(), p_user_id, 'Salário', 'receita'),
+    (gen_random_uuid(), p_user_id, 'Venda de Produtos', 'receita', 'receita_bruta'),
+    (gen_random_uuid(), p_user_id, 'Prestação de Serviços', 'receita', 'receita_bruta'),
+    (gen_random_uuid(), p_user_id, 'Receitas Avulsas', 'receita', 'receita_bruta'),
+    (gen_random_uuid(), p_user_id, 'Salário', 'receita', 'receita_bruta'),
     
+    -- Deduções (tipo despesa, mas vai pra dedução de imposto)
+    (gen_random_uuid(), p_user_id, 'Impostos sobre Faturamento', 'despesa', 'deducao_imposto'),
+
     -- Custos (Diretos)
-    (gen_random_uuid(), p_user_id, 'Compra de Mercadorias / Estoque', 'custo'),
-    (gen_random_uuid(), p_user_id, 'Terceirizações', 'custo'),
-    (gen_random_uuid(), p_user_id, 'Comissões sobre Venda', 'custo'),
-    (gen_random_uuid(), p_user_id, 'Fretes de Venda', 'custo'),
+    (gen_random_uuid(), p_user_id, 'Compra de Mercadorias / Estoque', 'custo', 'custo_variavel'),
+    (gen_random_uuid(), p_user_id, 'Matéria-Prima / Insumos', 'custo', 'custo_variavel'),
+    (gen_random_uuid(), p_user_id, 'Comissões sobre Venda', 'custo', 'custo_variavel'),
+    (gen_random_uuid(), p_user_id, 'Fretes de Venda', 'custo', 'custo_variavel'),
 
     -- Despesas (Operacionais / Fixas)
-    (gen_random_uuid(), p_user_id, 'Pró-labore', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Salários e Encargos', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Aluguel e Condomínio', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Água, Luz, Internet', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Manutenção e Limpeza', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Marketing e Publicidade', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Software e Assinaturas (SaaS)', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Honorários Contábeis/Jurídicos', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Material de Escritório', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Despesas de Viagem', 'despesa'),
-    (gen_random_uuid(), p_user_id, 'Impostos e Taxas Fixas', 'despesa'),
+    (gen_random_uuid(), p_user_id, 'Pró-labore', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Salários e Encargos', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Aluguel e Condomínio', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Água, Luz, Internet', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Manutenção e Limpeza', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Marketing e Publicidade', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Software e Assinaturas (SaaS)', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Honorários Contábeis/Jurídicos', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Material de Escritório', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Despesas de Viagem', 'despesa', 'despesa_fixa'),
+    (gen_random_uuid(), p_user_id, 'Terceirizações', 'despesa', 'despesa_fixa'),
 
     -- Investimentos
-    (gen_random_uuid(), p_user_id, 'Aplicações Financeiras', 'investimento'),
-    (gen_random_uuid(), p_user_id, 'Compra de Equipamentos', 'investimento'),
-    (gen_random_uuid(), p_user_id, 'Reformas e Infraestrutura', 'investimento'),
+    (gen_random_uuid(), p_user_id, 'Aplicações Financeiras', 'investimento', 'investimento'),
+    (gen_random_uuid(), p_user_id, 'Compra de Equipamentos', 'investimento', 'investimento'),
+    (gen_random_uuid(), p_user_id, 'Reformas e Infraestrutura', 'investimento', 'investimento'),
 
     -- Financeiro (Movimentações Neutras / Juros)
-    (gen_random_uuid(), p_user_id, 'Pagamento de Empréstimos', 'financeiro'),
-    (gen_random_uuid(), p_user_id, 'Tarifas Bancárias', 'financeiro'),
-    (gen_random_uuid(), p_user_id, 'Saques e Transferências', 'financeiro'),
-    (gen_random_uuid(), p_user_id, 'Aportes de Capital', 'financeiro');
+    (gen_random_uuid(), p_user_id, 'Pagamento de Empréstimos', 'financeiro', 'financeiro'),
+    (gen_random_uuid(), p_user_id, 'Tarifas Bancárias', 'financeiro', 'financeiro'),
+    (gen_random_uuid(), p_user_id, 'Saques e Transferências', 'financeiro', 'financeiro'),
+    (gen_random_uuid(), p_user_id, 'Aportes de Capital', 'financeiro', 'financeiro'),
+    (gen_random_uuid(), p_user_id, 'Juros / Multas Financeiras', 'financeiro', 'financeiro');
 
 END $$;

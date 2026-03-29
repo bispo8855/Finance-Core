@@ -61,7 +61,7 @@ export function calculateDashboardKPIs({
     .reduce((acc, t) => acc + t.value, 0);
 
   const upcomingTitlesList = titles
-    .filter(t => t.status === 'previsto')
+    .filter(t => t.status === 'previsto' && (t.side === 'receber' || t.side === 'pagar'))
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
   const totalProximosVencimentos = upcomingTitlesList.length;

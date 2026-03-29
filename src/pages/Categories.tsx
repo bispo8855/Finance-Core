@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Tags, Plus, Trash2, Pencil } from 'lucide-react';
-import { CategoryType, Category } from '@/types/financial';
+import { CategoryType, Category, DREClassification } from '@/types/financial';
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/finance/useCatalogs';
 
 const typeLabels: Record<CategoryType, string> = {
@@ -18,6 +18,27 @@ const typeColors: Record<CategoryType, string> = {
   investimento: 'bg-accent text-accent-foreground',
   financeiro: 'bg-muted text-muted-foreground',
 };
+
+const dreLabels: Record<DREClassification, string> = {
+  receita_bruta: 'Receita Bruta',
+  deducao_imposto: 'Deduções / Impostos',
+  custo_variavel: 'Custo Variável',
+  despesa_fixa: 'Despesa Fixa',
+  financeiro: 'Financeiro',
+  investimento: 'Investimento',
+  outro: 'Outro'
+};
+
+function getDreFallback(t: CategoryType): DREClassification {
+  switch(t) {
+    case 'receita': return 'receita_bruta';
+    case 'custo': return 'custo_variavel';
+    case 'despesa': return 'despesa_fixa';
+    case 'financeiro': return 'financeiro';
+    case 'investimento': return 'investimento';
+    default: return 'outro';
+  }
+}
 
 export default function Categories() {
   const { categories } = useCategories();
@@ -33,12 +54,14 @@ export default function Categories() {
 
   const [name, setName] = useState('');
   const [type, setType] = useState<CategoryType>('despesa');
+  const [dreClassification, setDreClassification] = useState<DREClassification>('despesa_fixa');
 
   const openCreateModal = () => {
     setModalMode('create');
     setEditingId(null);
     setName('');
     setType('despesa');
+    setDreClassification('despesa_fixa');
     setOpen(true);
   };
 
@@ -47,13 +70,14 @@ export default function Categories() {
     setEditingId(category.id);
     setName(category.name);
     setType(category.type);
+    setDreClassification(category.dreClassification || getDreFallback(category.type));
     setOpen(true);
   };
 
   const handleSave = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || !dreClassification) return;
     
-    const payload = { name: name.trim(), type };
+    const payload = { name: name.trim(), type, dreClassification };
     if (modalMode === 'create') {
       await addCategory(payload);
     } else if (modalMode === 'edit' && editingId) {
@@ -83,9 +107,14 @@ export default function Categories() {
             <div key={c.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-3">
                 <span className="text-sm font-medium">{c.name}</span>
-                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${typeColors[c.type]}`}>
-                  {typeLabels[c.type]}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${typeColors[c.type]}`}>
+                    {typeLabels[c.type]}
+                  </span>
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-secondary text-secondary-foreground border">
+                    DRE: {dreLabels[c.dreClassification || getDreFallback(c.type)]}
+                  </span>
+                </div>
               </div>
               <div className="flex items-center gap-1">
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary" onClick={() => openEditModal(c)} disabled={isDeleting || isUpdating}>
@@ -112,8 +141,18 @@ export default function Categories() {
               <Input value={name} onChange={e => setName(e.target.value)} placeholder="Ex: Marketing Digital" disabled={isAdding || isUpdating} />
             </div>
             <div className="space-y-2">
-              <Label>Tipo</Label>
-              <Select value={type} onValueChange={v => setType(v as CategoryType)} disabled={isAdding || isUpdating}>
+              <Label>Tipo Operacional</Label>
+              <Select 
+                value={type} 
+                onValueChange={v => {
+                  const newType = v as CategoryType;
+                  setType(newType);
+                  if (modalMode === 'create') {
+                    setDreClassification(getDreFallback(newType));
+                  }
+                }} 
+                disabled={isAdding || isUpdating}
+              >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {Object.entries(typeLabels).map(([k, v]) => (
@@ -122,10 +161,21 @@ export default function Categories() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-2">
+              <Label>Classificação na DRE</Label>
+              <Select value={dreClassification} onValueChange={v => setDreClassification(v as DREClassification)} disabled={isAdding || isUpdating}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(dreLabels).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(false)} disabled={isAdding || isUpdating}>Cancelar</Button>
-            <Button onClick={handleSave} disabled={isAdding || isUpdating || !name.trim()}>Salvar</Button>
+            <Button onClick={handleSave} disabled={isAdding || isUpdating || !name.trim() || !dreClassification}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

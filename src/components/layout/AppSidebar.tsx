@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, FilePlus, ArrowDownToLine, ArrowUpFromLine,
-  TrendingUp, BarChart3, Tags, Building2, Users, Settings, LogOut, History
+  TrendingUp, BarChart3, Tags, Building2, Users, Settings, LogOut, History, Calculator
 } from 'lucide-react';
 import { AppBrand } from '@/components/shared/AppBrand';
 import { NavLink } from '@/components/NavLink';
@@ -20,6 +20,7 @@ const mainNav = [
   { title: 'Lançamentos', url: '/lancamentos', icon: History },
   { title: 'Fluxo de Caixa', url: '/fluxo', icon: TrendingUp },
   { title: 'DRE', url: '/dre', icon: BarChart3 },
+  { title: 'Precificação', url: '/precificacao', icon: Calculator },
 ];
 
 const registrationNav = [
