@@ -4,12 +4,13 @@ import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { PeriodOption, isDateInPeriod } from '@/lib/dateUtils';
 import { PeriodFilter as PeriodFilterComponent } from '@/components/finance/PeriodFilter';
 import { Input } from '@/components/ui/input';
-import { Search, History } from 'lucide-react';
+import { Search, History, User } from 'lucide-react';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { DocumentType, TitleStatus } from '@/types/financial';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
 import { useDeleteDocument } from '@/hooks/finance/useDeleteDocument';
 import { useToast } from '@/components/ui/use-toast';
@@ -20,10 +21,10 @@ const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDi
 export default function Transactions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const queryCategoryId = searchParams.get('categoryId');
-  // period could also be parsed if needed, but keeping isolated state is fine for now
 
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<PeriodOption>('current_month');
+  const [contactId, setContactId] = useState<string>('all');
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editDocumentId, setEditDocumentId] = useState<string | null>(null);
@@ -39,6 +40,10 @@ export default function Transactions() {
 
     if (queryCategoryId) {
       list = list.filter(d => d.categoryId === queryCategoryId);
+    }
+
+    if (contactId !== 'all') {
+      list = list.filter(d => d.contactId === contactId);
     }
 
     // Filter by period using competenceDate
@@ -60,7 +65,43 @@ export default function Transactions() {
 
     // Sort by competenceDate descending
     return list.sort((a, b) => b.competenceDate.localeCompare(a.competenceDate));
-  }, [snapshot, search, period, queryCategoryId]);
+  }, [snapshot, search, period, queryCategoryId, contactId]);
+
+  const clientSummary = useMemo(() => {
+    if (contactId === 'all' || !snapshot) return null;
+
+    // Títulos de entrada do cliente
+    const entryTitles = snapshot.titles.filter(t => 
+      t.side === 'receber' && 
+      (t.contactId === contactId || snapshot.documents.find(d => d.id === t.documentId)?.contactId === contactId)
+    );
+    
+    let vendidoPeriodo = 0;
+    let recebidoPeriodo = 0;
+    let vendidoTotal = 0;
+    let recebidoTotal = 0;
+
+    entryTitles.forEach(t => {
+      // Check if title affects the period
+      const inPeriod = isDateInPeriod(t.dueDate, period) || (t.settledAt && isDateInPeriod(t.settledAt, period));
+      
+      vendidoTotal += t.value;
+      if (inPeriod) vendidoPeriodo += t.value;
+
+      const movements = snapshot.movements?.filter(m => m.titleId === t.id) || [];
+      const paidValue = movements.reduce((sum, m) => sum + m.valuePaid, 0);
+
+      recebidoTotal += paidValue;
+      if (inPeriod) recebidoPeriodo += paidValue;
+    });
+
+    return {
+      vendidoPeriodo,
+      recebidoPeriodo,
+      abertoPeriodo: vendidoPeriodo - recebidoPeriodo,
+      abertoTotal: vendidoTotal - recebidoTotal
+    };
+  }, [contactId, snapshot, period]);
 
   if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando histórico...</div>;
 
@@ -140,10 +181,52 @@ export default function Transactions() {
         </div>
       </div>
 
+      {clientSummary && (
+        <div className="bg-card rounded-xl border shadow-sm p-5 animate-fade-in">
+          <h3 className="text-sm font-semibold flex items-center gap-2 mb-4">
+            <User className="w-4 h-4 text-muted-foreground" />
+            Resumo do Cliente Selecionado
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase">Vendido no período</p>
+              <p className="text-lg font-bold">{fmt(clientSummary.vendidoPeriodo)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase">Recebido no período</p>
+              <p className="text-lg font-bold">{fmt(clientSummary.recebidoPeriodo)}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase">Em Aberto no Período</p>
+              <p className={`text-lg font-bold ${clientSummary.abertoPeriodo > 0.01 ? 'text-warning-foreground' : ''}`}>
+                {fmt(clientSummary.abertoPeriodo)}
+              </p>
+            </div>
+            <div className="space-y-1 pl-4 border-l">
+              <p className="text-xs font-medium text-muted-foreground uppercase">Aberto Total do Cliente</p>
+              <p className={`text-lg font-bold ${clientSummary.abertoTotal > 0.01 ? 'text-destructive' : ''}`}>
+                {fmt(clientSummary.abertoTotal)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <PeriodFilterComponent value={period} onChange={setPeriod} className="h-9 w-[160px] text-xs font-medium bg-background border-muted" />
+            <Select value={contactId} onValueChange={setContactId}>
+              <SelectTrigger className="w-[200px] h-9 text-xs">
+                <SelectValue placeholder="Filtrar por contato" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos os contatos</SelectItem>
+                {[...snapshot.contacts].sort((a,b) => a.name.localeCompare(b.name)).map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {queryCategoryId && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-medium">
                 Filtrado por categoria
@@ -153,10 +236,14 @@ export default function Transactions() {
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 w-full sm:w-64">
-            <Search className="w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Buscar lançamento..." value={search} onChange={e => setSearch(e.target.value)}
-              className="border-0 bg-transparent h-auto p-0 text-sm focus-visible:ring-0 shadow-none" />
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Buscar lançamento..." 
+              value={search} 
+              onChange={e => setSearch(e.target.value)}
+              className="pl-8 h-9 text-xs" 
+            />
           </div>
         </div>
 

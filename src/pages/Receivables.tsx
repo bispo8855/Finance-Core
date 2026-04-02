@@ -4,6 +4,7 @@ import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
 import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
 import { TitleDetailsSheet } from '@/components/finance/TitleDetailsSheet';
+import { KPICard } from '@/components/shared/KPICard';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { PeriodFilter } from '@/components/finance/PeriodFilter';
@@ -11,7 +12,7 @@ import { PeriodOption, isDateInPeriod } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Title, TitleStatus } from '@/types/financial';
-import { ArrowDownToLine, Search, MoreHorizontal, Edit, Trash2, RotateCcw } from 'lucide-react';
+import { ArrowDownToLine, Search, MoreHorizontal, Edit, Trash2, RotateCcw, Wallet, CheckCircle, AlertTriangle, FileText } from 'lucide-react';
 import { useTitles } from '@/hooks/finance/useTitles';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { useDeleteDocument } from '@/hooks/finance/useDeleteDocument';
@@ -66,7 +67,7 @@ export default function Receivables() {
     } else if (tab === 2) { // Vencidos
       list = list.filter(t => t.status === 'previsto' && t.dueDate < todayStr);
     } else if (tab === 3) { // Recebidos
-      list = list.filter(t => t.status === 'recebido');
+      list = list.filter(t => t.status === 'recebido' || t.status === 'pago');
     }
 
     if (search) {
@@ -85,6 +86,30 @@ export default function Receivables() {
 
     return list.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   }, [recebimentos, snapshot, tab, search, period, todayStr]);
+
+  const summaryMetrics = useMemo(() => {
+    let totalReceber = 0;
+    let totalRecebido = 0;
+    let vencido = 0;
+    
+    filtered.forEach(t => {
+      const isSettled = t.status === 'pago' || t.status === 'recebido';
+      
+      const titleMovements = snapshot?.movements?.filter(m => m.titleId === t.id) || [];
+      const paidValue = titleMovements.reduce((sum, m) => sum + m.valuePaid, 0);
+      const openValue = isSettled ? 0 : Math.max(0, t.value - paidValue);
+
+      totalRecebido += paidValue;
+      if (!isSettled && openValue > 0) {
+        totalReceber += openValue;
+        if (t.dueDate < todayStr) {
+          vencido += openValue;
+        }
+      }
+    });
+
+    return { totalReceber, totalRecebido, vencido, count: filtered.length };
+  }, [filtered, snapshot, todayStr]);
 
   if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando títulos...</div>;
 
@@ -136,6 +161,33 @@ export default function Receivables() {
         </Button>
       </div>
 
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+        <KPICard 
+          title="Total a Receber" 
+          value={fmt(summaryMetrics.totalReceber)} 
+          icon={Wallet} 
+          variant="default" 
+        />
+        <KPICard 
+          title="Total Recebido" 
+          value={fmt(summaryMetrics.totalRecebido)} 
+          icon={CheckCircle} 
+          variant="positive" 
+        />
+        <KPICard 
+          title="Vencido" 
+          value={fmt(summaryMetrics.vencido)} 
+          icon={AlertTriangle} 
+          variant={summaryMetrics.vencido > 0 ? "negative" : "default"} 
+        />
+        <KPICard 
+          title="Títulos" 
+          value={String(summaryMetrics.count)} 
+          icon={FileText} 
+          variant="default" 
+        />
+      </div>
+
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex gap-1 bg-muted rounded-lg p-0.5">
@@ -148,10 +200,14 @@ export default function Receivables() {
           </div>
           <div className="flex items-center gap-2">
             <PeriodFilter value={period} onChange={setPeriod} className="h-9 w-[160px] text-xs font-medium bg-background border-muted" />
-            <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 w-full sm:w-64">
-              <Search className="w-4 h-4 text-muted-foreground" />
-              <Input placeholder="Buscar cliente..." value={search} onChange={e => setSearch(e.target.value)}
-                className="border-0 bg-transparent h-auto p-0 text-sm focus-visible:ring-0 shadow-none" />
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input 
+                placeholder="Buscar cliente..." 
+                value={search} 
+                onChange={e => setSearch(e.target.value)}
+                className="pl-8 h-9 text-xs" 
+              />
             </div>
           </div>
         </div>
