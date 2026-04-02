@@ -1,218 +1,89 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { KPICard } from '@/components/shared/KPICard';
-import { StatusBadge } from '@/components/shared/StatusBadge';
-import { PaymentModal } from '@/components/shared/PaymentModal';
 import { Button } from '@/components/ui/button';
-import { Title } from '@/types/financial';
-import {
-  TrendingUp, TrendingDown, ArrowDownToLine,
-  ArrowUpFromLine, AlertTriangle, CreditCard, Plus, Clock, Info
-} from 'lucide-react';
-import { useDashboard } from '@/hooks/finance/useDashboard';
-import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { cn } from '@/lib/utils';
+import { Plus, BarChart3, Calculator } from 'lucide-react';
+import { useManagerialDashboard } from '@/hooks/finance/useManagerialDashboard';
 
-const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+import { ExecutiveSummary } from '@/components/dashboard/ExecutiveSummary';
+import { ManagerialAlerts } from '@/components/dashboard/ManagerialAlerts';
+import { ExecutiveDrivers } from '@/components/dashboard/ExecutiveDrivers';
+import { EvolutionChart } from '@/components/dashboard/EvolutionChart';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState<'receber' | 'pagar'>('receber');
-  const [payTitle, setPayTitle] = useState<Title | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const monthStr = todayStr.substring(0, 7);
 
-  const { data: snapshot } = useFinanceSnapshot();
-  const { data: kpis, isLoading } = useDashboard(monthStr);
+  const { data: kpis, isLoading } = useManagerialDashboard(monthStr);
 
-  if (isLoading || !kpis || !snapshot) {
-    return <div className="p-8 text-center text-muted-foreground">Carregando dashboard...</div>;
+  if (isLoading || !kpis) {
+    return <div className="p-8 text-center text-muted-foreground">Carregando cockpit...</div>;
   }
 
-  const getContactName = (id: string) => snapshot.contacts.find(c => c.id === id)?.name || '—';
-  const getCategoryName = (id: string) => snapshot.categories.find(c => c.id === id)?.name || '—';
-
-  const upcomingTitles = kpis.upcomingTitles.filter(t => t.side === tab);
-
-  const daysOverdue = (dueDate: string) => {
-    const diff = Math.floor((new Date().getTime() - new Date(dueDate + 'T12:00:00').getTime()) / 86400000);
-    return diff > 0 ? diff : 0;
-  };
-
-  const maxBalance = Math.max(...kpis.projectedBalanceData.map(d => d.balance));
-  const minBalance = Math.min(...kpis.projectedBalanceData.map(d => d.balance));
-  
-  let strokeColor = "url(#splitColor)";
-  if (minBalance >= 0) strokeColor = "#10b981"; // always positive
-  else if (maxBalance < 0) strokeColor = "#ef4444"; // always negative
-
-  const gradientOffset = () => {
-    if (maxBalance <= 0) return 0;
-    if (minBalance >= 0) return 1;
-    return maxBalance / (maxBalance - minBalance);
-  };
-  const off = gradientOffset();
-
   return (
-    <div className="space-y-6 max-w-7xl">
-      <div className="flex items-center justify-between">
+    <div className="space-y-8 max-w-7xl">
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Visão geral do seu financeiro</p>
-        </div>
-        <Button onClick={() => navigate('/lancar')} className="gap-1.5">
-          <Plus className="w-4 h-4" /> Novo lançamento
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard 
-          title="Saldo disponível hoje" 
-          value={fmt(kpis.saldoDisponivelHoje)} 
-          icon={CreditCard} 
-          variant={kpis.saldoDisponivelHoje >= 0 ? 'default' : 'negative'} 
-        />
-        <KPICard 
-          title="A receber (previsto)" 
-          value={fmt(kpis.aReceberPrevisto)} 
-          icon={ArrowDownToLine} 
-          variant="positive"
-        />
-        <KPICard 
-          title="A pagar (previsto)" 
-          value={fmt(kpis.aPagarPrevisto)} 
-          icon={ArrowUpFromLine} 
-          variant="warning" 
-        />
-        <KPICard 
-          title="Saldo projetado final" 
-          value={fmt(kpis.saldoProjetadoFinal)} 
-          icon={kpis.saldoProjetadoFinal >= 0 ? TrendingUp : TrendingDown} 
-          variant={kpis.saldoProjetadoFinal >= 0 ? 'positive' : 'negative'} 
-        />
-      </div>
-
-      <div className="bg-card rounded-xl border shadow-sm p-4 w-full h-[320px]">
-        <h3 className="font-semibold text-sm mb-4">Projeção de Saldo (30 dias)</h3>
-        <ResponsiveContainer width="100%" height="100%" className="-ml-4 pb-4">
-          <LineChart data={kpis.projectedBalanceData} margin={{ top: 5, right: 20, left: 10, bottom: 0 }}>
-            <defs>
-              <linearGradient id="splitColor" x1="0" y1="0" x2="0" y2="1">
-                <stop offset={off} stopColor="#10b981" stopOpacity={1} />
-                <stop offset={off} stopColor="#ef4444" stopOpacity={1} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="shortDate" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} dy={10} minTickGap={30} />
-            <YAxis 
-              axisLine={false} 
-              tickLine={false} 
-              tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} 
-              tickFormatter={(val) => `R$ ${val.toLocaleString('pt-BR')}`} 
-              width={80} 
-              domain={[(dataMin: number) => Math.min(0, dataMin - (Math.abs(dataMin)*0.1 || 100)), (dataMax: number) => dataMax + (Math.abs(dataMax)*0.1 || 100)]}
-            />
-            <Tooltip 
-              formatter={(value: number) => [fmt(value), 'Saldo']}
-              labelFormatter={(label) => `Data: ${label}`}
-              contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', color: 'hsl(var(--foreground))' }}
-            />
-            <Line 
-              type="monotone" 
-              dataKey="balance" 
-              stroke={strokeColor} 
-              strokeWidth={3} 
-              dot={false}
-              activeDot={{ r: 5, fill: 'hsl(var(--primary))', stroke: 'hsl(var(--background))', strokeWidth: 2 }}
-            />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div className="bg-muted/50 rounded-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border">
-        <div className="flex items-center gap-2">
-          <div className={cn("p-2 rounded-lg", (kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-500" : "bg-secondary text-secondary-foreground")}>
-            {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? <AlertTriangle className="w-5 h-5" /> : <Info className="w-5 h-5" />}
-          </div>
-          <div>
-            <h3 className="font-semibold text-sm">
-              {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "Atenção Necessária" : "Painel de Avisos"}
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {(kpis.aReceberVencido > 0 || kpis.aPagarVencido > 0) ? "Existem títulos vencidos aguardando baixa" : "Resumo da sua agenda financeira em aberto"}
-            </p>
-          </div>
-        </div>
-        
-        <div className="flex flex-wrap gap-x-6 gap-y-2">
-          <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">A Receber Vencido</span>
-            <span className={`text-sm font-bold ${kpis.aReceberVencido > 0 ? 'text-negative' : 'text-foreground'}`}>
-              {fmt(kpis.aReceberVencido)}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">A Pagar Vencido</span>
-            <span className={`text-sm font-bold ${kpis.aPagarVencido > 0 ? 'text-negative' : 'text-foreground'}`}>
-              {fmt(kpis.aPagarVencido)}
-            </span>
-          </div>
-          <div className="flex flex-col">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-0.5">Títulos em Aberto</span>
-            <span className="text-sm font-bold flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-              {kpis.totalProximosVencimentos} {kpis.totalProximosVencimentos === 1 ? 'título' : 'títulos'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-card rounded-xl border shadow-sm">
-        <div className="p-4 border-b flex items-center justify-between">
-          <h3 className="font-semibold">Lista de títulos em aberto</h3>
-          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
-            <button onClick={() => setTab('receber')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${tab === 'receber' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
-              A Receber
-            </button>
-            <button onClick={() => setTab('pagar')} className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${tab === 'pagar' ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground'}`}>
-              A Pagar
-            </button>
-          </div>
-        </div>
-        <div className="divide-y">
-          {upcomingTitles.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Nenhum título pendente.</p>
-          ) : upcomingTitles.map(t => {
-            const currentStatus = (t.status === 'previsto' && t.dueDate < todayStr) ? 'atrasado' : t.status;
-            return (
-            <div key={t.id} className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="space-y-0.5 min-w-0">
-                  <p className="text-sm font-medium truncate">{t.description}</p>
-                  <p className="text-xs text-muted-foreground">{getContactName(t.contactId)} · {new Date(t.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}</p>
-                </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight">Visão Geral</h1>
+            {kpis && (
+              <div className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border shadow-sm ${
+                kpis.statusGeral.status === 'saudavel' ? 'bg-positive/10 text-positive border-positive/20' :
+                kpis.statusGeral.status === 'atencao' ? 'bg-warning/10 text-warning border-warning/20' :
+                'bg-destructive/10 text-destructive border-destructive/20'
+              }`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${
+                  kpis.statusGeral.status === 'saudavel' ? 'bg-positive' :
+                  kpis.statusGeral.status === 'atencao' ? 'bg-warning' :
+                  'bg-destructive'
+                }`} />
+                {kpis.statusGeral.status === 'saudavel' ? 'Saudável' :
+                 kpis.statusGeral.status === 'atencao' ? 'Atenção' : 'Crítico'}
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <StatusBadge status={currentStatus as Title['status']} />
-                {currentStatus === 'atrasado' && (
-                  <span className="text-xs text-negative font-medium">{daysOverdue(t.dueDate)}d</span>
-                )}
-                <span className="text-sm font-semibold w-28 text-right">{fmt(t.value)}</span>
-                {t.status === 'previsto' && (
-                  <Button size="sm" variant="outline" className="text-xs" onClick={() => setPayTitle(t)}>
-                    Baixar
-                  </Button>
-                )}
-              </div>
-            </div>
-            );
-          })}
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
+            <span>Cockpit Gerencial • Mês atual ({new Date().toLocaleString('pt-BR', { month: 'long', year: 'numeric' })})</span>
+            <span className="text-muted-foreground/30">•</span>
+            <span>{kpis?.statusGeral.message}</span>
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={() => navigate('/dre')} className="gap-2">
+            <BarChart3 className="w-4 h-4 text-muted-foreground" />
+             DRE Completo
+          </Button>
+          <Button variant="outline" onClick={() => navigate('/precificacao')} className="gap-2">
+            <Calculator className="w-4 h-4 text-muted-foreground" />
+             Precificação
+          </Button>
+          <Button onClick={() => navigate('/lancar')} className="gap-1.5 ml-2">
+            <Plus className="w-4 h-4" /> Novo
+          </Button>
         </div>
       </div>
 
-      <PaymentModal title={payTitle} open={!!payTitle} onClose={() => setPayTitle(null)} />
+      {/* RESUMO EXECUTIVO */}
+      <ExecutiveSummary 
+        receitaLiquida={kpis.receitaLiquida}
+        resultadoLiquido={kpis.resultadoLiquido}
+        margem={kpis.margem}
+        caixaAtual={kpis.caixaAtual}
+      />
+
+      {/* ALERTS & INSIGHTS */}
+      <ManagerialAlerts 
+        alertas={kpis.alertas}
+        insights={kpis.insights}
+      />
+
+      {/* DRIVERS & EVOLUCAO */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
+        <EvolutionChart evolucao={kpis.evolucao} evolucaoInsight={kpis.evolucaoInsight} />
+        <ExecutiveDrivers drivers={kpis.drivers} />
+      </div>
+
     </div>
   );
 }

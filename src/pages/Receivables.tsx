@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
 import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
@@ -27,7 +28,10 @@ const tabs = [
 ];
 
 export default function Receivables() {
-  const [tab, setTab] = useState(0);
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('status') === 'atrasado' ? 2 : 0;
+  
+  const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<PeriodOption>('current_month');
   const [payTitle, setPayTitle] = useState<Title | null>(null);

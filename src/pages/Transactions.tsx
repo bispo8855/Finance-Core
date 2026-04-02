@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { PeriodOption, isDateInPeriod } from '@/lib/dateUtils';
 import { PeriodFilter as PeriodFilterComponent } from '@/components/finance/PeriodFilter';
@@ -17,6 +18,10 @@ import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
 export default function Transactions() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queryCategoryId = searchParams.get('categoryId');
+  // period could also be parsed if needed, but keeping isolated state is fine for now
+
   const [search, setSearch] = useState('');
   const [period, setPeriod] = useState<PeriodOption>('current_month');
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
@@ -31,6 +36,10 @@ export default function Transactions() {
     if (!snapshot) return [];
     
     let list = [...snapshot.documents];
+
+    if (queryCategoryId) {
+      list = list.filter(d => d.categoryId === queryCategoryId);
+    }
 
     // Filter by period using competenceDate
     list = list.filter(d => isDateInPeriod(d.competenceDate, period));
@@ -51,7 +60,7 @@ export default function Transactions() {
 
     // Sort by competenceDate descending
     return list.sort((a, b) => b.competenceDate.localeCompare(a.competenceDate));
-  }, [snapshot, search, period]);
+  }, [snapshot, search, period, queryCategoryId]);
 
   if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando histórico...</div>;
 
@@ -135,6 +144,14 @@ export default function Transactions() {
         <div className="p-4 border-b flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <PeriodFilterComponent value={period} onChange={setPeriod} className="h-9 w-[160px] text-xs font-medium bg-background border-muted" />
+            {queryCategoryId && (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-lg text-xs font-medium">
+                Filtrado por categoria
+                <button onClick={() => { searchParams.delete('categoryId'); setSearchParams(searchParams); }} className="hover:text-primary/70 ml-1">
+                  ✕
+                </button>
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-2 bg-muted rounded-lg px-3 py-1.5 w-full sm:w-64">
             <Search className="w-4 h-4 text-muted-foreground" />

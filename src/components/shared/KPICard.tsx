@@ -7,6 +7,7 @@ interface KPICardProps {
   icon: LucideIcon;
   variant?: 'default' | 'positive' | 'negative' | 'warning';
   subtitle?: string;
+  onClick?: () => void;
 }
 
 const variantStyles = {
@@ -23,9 +24,16 @@ const iconBg = {
   warning: 'bg-warning-subtle text-warning',
 };
 
-export function KPICard({ title, value, icon: Icon, variant = 'default', subtitle }: KPICardProps) {
+export function KPICard({ title, value, icon: Icon, variant = 'default', subtitle, onClick }: KPICardProps) {
   return (
-    <div className={cn('rounded-xl border p-6 shadow-sm animate-fade-in', variantStyles[variant])}>
+    <div 
+      className={cn(
+        'rounded-xl border p-6 shadow-sm animate-fade-in transition-colors', 
+        variantStyles[variant],
+        onClick && 'cursor-pointer hover:bg-muted/50 group'
+      )}
+      onClick={onClick}
+    >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <p className="text-sm font-medium text-muted-foreground">{title}</p>
