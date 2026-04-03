@@ -8,18 +8,6 @@ export default function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    // Apenas redireciona se for na raiz /
-    if (location.pathname === '/') {
-      const hasCompleted = localStorage.getItem('hasCompletedOnboarding');
-      const hasDismissed = localStorage.getItem('hasDismissedOnboarding');
-      
-      if (!hasCompleted && !hasDismissed) {
-        navigate('/onboarding', { replace: true });
-      }
-    }
-  }, [location.pathname, navigate]);
-
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">

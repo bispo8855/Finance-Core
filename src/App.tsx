@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import AppLayout from "@/components/layout/AppLayout";
 import Dashboard from "./pages/Dashboard";
+import Landing from "./pages/landing";
 import NewDocument from "./pages/NewDocument";
 import Receivables from "./pages/Receivables";
 import Payables from "./pages/Payables";
@@ -20,6 +21,21 @@ import Login from "./pages/Login";
 import ResetPassword from "./pages/ResetPassword";
 import Onboarding from "./pages/Onboarding";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { getAuthRedirectPath } from "./utils/navigation";
+
+const Home = () => {
+  const { session, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <div className="min-h-screen flex items-center justify-center p-4">Carregando...</div>;
+  }
+
+  if (!session) {
+    return <Landing />;
+  }
+
+  return <Navigate to={getAuthRedirectPath()} replace />;
+};
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { session, isLoading } = useAuth();
@@ -42,11 +58,17 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Rotas Públicas */}
+            <Route path="/" element={<Home />} />
             <Route path="/login" element={<Login />} />
             <Route path="/reset-password" element={<ResetPassword />} />
+            
+            {/* Rota de Onboarding (protegida, mas sem layout padrão) */}
             <Route element={<ProtectedRoute><Onboarding /></ProtectedRoute>} path="/onboarding" />
+            
+            {/* Rotas do App (protegidas e com layout) */}
             <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/lancar" element={<NewDocument />} />
               <Route path="/receber" element={<Receivables />} />
               <Route path="/pagar" element={<Payables />} />
@@ -59,7 +81,8 @@ const App = () => (
               <Route path="/contatos" element={<Contacts />} />
               <Route path="/configuracoes" element={<SettingsPage />} />
             </Route>
-            <Route path="*" element={<NotFound />} />
+            
+            <Route path="*" element={<Landing />} />
           </Routes>
         </BrowserRouter>
     </TooltipProvider>

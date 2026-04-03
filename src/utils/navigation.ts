@@ -1,5 +1,15 @@
 import { NavigateFunction } from 'react-router-dom';
 
+export function isOnboardingCompleted() {
+  const hasCompleted = localStorage.getItem('hasCompletedOnboarding') === 'true';
+  const hasDismissed = localStorage.getItem('hasDismissedOnboarding') === 'true';
+  return hasCompleted || hasDismissed;
+}
+
+export function getAuthRedirectPath() {
+  return isOnboardingCompleted() ? '/dashboard' : '/onboarding';
+}
+
 export function navigateToCashFlow(navigate: NavigateFunction) {
   navigate('/fluxo');
 }

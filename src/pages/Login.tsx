@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabaseClient';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,17 +16,12 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/contexts/AuthContext';
+import { getAuthRedirectPath } from '@/utils/navigation';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { session } = useAuth();
-
-  useEffect(() => {
-    if (session) {
-      console.log('Login: Usuário autenticado (sessão ativa). Redirecionamento executado para /');
-      navigate('/', { replace: true });
-    }
-  }, [session, navigate]);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -34,7 +30,7 @@ export default function Login() {
   const { toast } = useToast();
   
   // Usamos um mode state simples para alternar entre entrar e criar conta
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(searchParams.get('signup') === 'true');
 
   // Estados para o Modal de Reset
   const [resetEmail, setResetEmail] = useState('');
@@ -79,7 +75,7 @@ export default function Login() {
       console.log('Login: Login sucesso! Sessão recebida com token:', data.session?.access_token ? 'Presente' : 'Ausente');
       if (data.session) {
         console.log('Login: Redirecionamento executado direto após o signIn');
-        navigate('/', { replace: true });
+        navigate(getAuthRedirectPath(), { replace: true });
       }
     }
 
