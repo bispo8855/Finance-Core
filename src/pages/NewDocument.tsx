@@ -1,10 +1,23 @@
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
+import { toast } from 'sonner';
 
 export default function NewDocument() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const sideParam = searchParams.get('side');
+
+  useEffect(() => {
+    if (location.state?.from === 'onboarding') {
+      toast.success("Bem-vindo! Faça seu primeiro lançamento para alimentar o painel com dados reais.", {
+        duration: 8000,
+      });
+      // Limpa o state para não disparar várias vezes
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location, navigate]);
   
   const defaultSide = (sideParam === 'pagar' || sideParam === 'receber') ? sideParam : undefined;
 

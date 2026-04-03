@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
@@ -51,40 +51,60 @@ export default function Payables() {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const filtered = useMemo(() => {
-    if (!pagamentos || !snapshot) return [];
+  const [filtered, outOfPeriodCount] = useMemo(() => {
+    if (!pagamentos || !snapshot) return [[], 0] as [Title[], number];
     
-    let list = [...pagamentos];
+    const inPeriod: Title[] = [];
+    const outOfPeriod: Title[] = [];
 
-    list = list.filter(t => {
+    pagamentos.forEach(t => {
       const isSettled = t.status === 'pago' || t.status === 'recebido';
       const referenceDate = (isSettled && t.settledAt) ? t.settledAt : t.dueDate;
-      return isDateInPeriod(referenceDate, period);
-    });
+      const tInPeriod = isDateInPeriod(referenceDate, period);
+      const isOverdue = !isSettled && t.dueDate < todayStr;
 
-    if (tab === 1) { // Previstos
-      list = list.filter(t => t.status === 'previsto' && t.dueDate >= todayStr);
-    } else if (tab === 2) { // Vencidos
-      list = list.filter(t => t.status === 'previsto' && t.dueDate < todayStr);
-    } else if (tab === 3) { // Pagos
-      list = list.filter(t => t.status === 'pago');
-    }
+      let keepInPeriod = tInPeriod;
+      let keepOutPeriod = !tInPeriod && isOverdue;
 
-    if (search) {
-      const term = search.toLowerCase();
-      list = list.filter(t => {
+      if (tab === 1) { // Previstos
+        if (t.status !== 'previsto' || t.dueDate < todayStr) {
+          keepInPeriod = false;
+          keepOutPeriod = false; // Atrasados não entram em previstos
+        }
+      } else if (tab === 2) { // Vencidos
+        if (t.status !== 'previsto' || t.dueDate >= todayStr) {
+          keepInPeriod = false;
+          keepOutPeriod = false;
+        }
+      } else if (tab === 3) { // Pagos
+        if (!isSettled) {
+          keepInPeriod = false;
+          keepOutPeriod = false;
+        }
+      }
+
+      if (search) {
+        const term = search.toLowerCase();
         const doc = snapshot.documents.find(d => d.id === t.documentId);
         const contactName = snapshot.contacts.find(c => c.id === (t.contactId || doc?.contactId))?.name || '';
         const desc = t.description || doc?.description || '';
-        return (
-          desc.toLowerCase().includes(term) ||
-          contactName.toLowerCase().includes(term) ||
-          t.status.toLowerCase().includes(term)
-        );
-      });
-    }
+        const match = desc.toLowerCase().includes(term) ||
+                      contactName.toLowerCase().includes(term) ||
+                      t.status.toLowerCase().includes(term);
+        if (!match) {
+          keepInPeriod = false;
+          keepOutPeriod = false;
+        }
+      }
 
-    return list.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+      if (keepInPeriod) inPeriod.push(t);
+      else if (keepOutPeriod) outOfPeriod.push(t);
+    });
+
+    inPeriod.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    outOfPeriod.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+    return [[...outOfPeriod, ...inPeriod], outOfPeriod.length] as [Title[], number];
   }, [pagamentos, snapshot, tab, search, period, todayStr]);
 
   const summaryMetrics = useMemo(() => {
@@ -231,8 +251,15 @@ export default function Payables() {
               </tr>
             </thead>
             <tbody className="divide-y">
-              {filtered.map(t => (
-                <tr key={t.id} className="hover:bg-muted/30 transition-colors">
+              {filtered.map((t, index) => (
+                <Fragment key={t.id}>
+                  {index === 0 && outOfPeriodCount > 0 && (
+                    <tr className="bg-destructive/10"><td colSpan={9} className="px-4 py-2 text-xs font-semibold text-destructive uppercase tracking-wide">Títulos Atrasados (Anteriores ao período)</td></tr>
+                  )}
+                  {index === outOfPeriodCount && filtered.length > outOfPeriodCount && outOfPeriodCount > 0 && period !== 'all' && (
+                    <tr className="bg-muted/50"><td colSpan={9} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">No período selecionado</td></tr>
+                  )}
+                  <tr className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3">{new Date(t.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-4 py-3">{getContactName(t.contactId || snapshot?.documents.find(d => d.id === t.documentId)?.contactId || '')}</td>
                   <td className="px-4 py-3 max-w-[200px] truncate" title={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description}>
@@ -314,6 +341,7 @@ export default function Payables() {
                     </div>
                   </td>
                 </tr>
+                </Fragment>
               ))}
               {filtered.length === 0 && (
                 <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">Nenhum título encontrado.</td></tr>
