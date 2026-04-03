@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Plus, BarChart3, Calculator } from 'lucide-react';
@@ -15,7 +15,7 @@ import { ExecutiveDrivers } from '@/components/dashboard/ExecutiveDrivers';
 import { EvolutionChart } from '@/components/dashboard/EvolutionChart';
 
 const SummarySkeleton = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
+  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
     {[1, 2, 3, 4].map(i => (
       <div key={i} className="h-[128px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
     ))}
@@ -23,7 +23,7 @@ const SummarySkeleton = () => (
 );
 
 const AlertsSkeleton = () => (
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-fade-in">
+  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
     <div className="lg:col-span-2 space-y-4">
       <div className="h-[20px] w-[150px] bg-muted rounded animate-pulse" />
       <div className="h-[80px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
@@ -37,7 +37,7 @@ const AlertsSkeleton = () => (
 );
 
 const CardSkeleton = () => (
-  <div className="h-[430px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse animate-fade-in" />
+  <div className="h-[430px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
 );
 
 function DashboardHeader({ monthStr }: { monthStr: string }) {
@@ -97,19 +97,17 @@ function DriversSection({ monthStr }: { monthStr: string }) {
 }
 
 function EvolutionSection({ monthStr }: { monthStr: string }) {
-  // Declarative lazy mount to prevent blocking main thread initially
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { 
-    // Uses rAF to ensure it queues after the current frame (rendering other skeletons)
-    requestAnimationFrame(() => {
-      setMounted(true);
-    });
-  }, []);
+  const { data, isLoading } = useDashboardEvolution(monthStr, true);
+  // Defer rendering of the heavy chart to low priority
+  const deferredData = useDeferredValue(data);
+  const deferredLoading = useDeferredValue(isLoading);
 
-  const { data, isLoading } = useDashboardEvolution(monthStr, mounted);
-  
-  if (!mounted || isLoading || !data) return <CardSkeleton />;
-  return <div className="animate-fade-in h-full"><EvolutionChart evolucao={data.evolucao} evolucaoInsight={data.evolucaoInsight} /></div>;
+  if (!deferredData || deferredLoading) return <CardSkeleton />;
+  return (
+    <div className="animate-fade-in h-full">
+      <EvolutionChart evolucao={deferredData.evolucao} evolucaoInsight={deferredData.evolucaoInsight} />
+    </div>
+  );
 }
 
 export default function Dashboard() {
