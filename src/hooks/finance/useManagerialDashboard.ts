@@ -23,14 +23,16 @@ export function useDashboardSummary(currentMonthISO: string) {
     if (!snapshot) return null;
     const params = { ...snapshot, currentMonthISO, referenceDateISO: getReferenceDateISO() };
     const metrics = calculateBaseMetrics(params);
-    const { statusGeral } = calculateAlertsAndStatus(params, metrics);
+    const { alertas, statusGeral } = calculateAlertsAndStatus(params, metrics);
+    const { insights } = calculateDriversAndInsights(params, metrics, alertas);
     
     return {
       receitaLiquida: metrics.receitaLiquida,
       resultadoLiquido: metrics.resultadoLiquido,
       margem: metrics.margem,
       caixaAtual: metrics.caixaAtual,
-      statusGeral
+      statusGeral,
+      insights
     };
   }, [snapshot, currentMonthISO]);
 

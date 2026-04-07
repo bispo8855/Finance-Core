@@ -7,26 +7,26 @@ interface AppBrandProps {
 export function AppBrand({ collapsed }: AppBrandProps) {
   if (collapsed) {
     return (
-      <div className="flex items-center justify-center w-full">
+      <div className="flex items-center justify-center w-full pt-2">
         <img
-          src={APP_CONFIG.favicon}
+          src="/aurys-icon.svg"
           alt={APP_CONFIG.name}
-          className="h-9 w-9 object-contain"
+          className="h-8 w-8 object-contain animate-in fade-in zoom-in duration-500"
         />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col items-center min-w-0 w-full">
+    <div className="flex items-center gap-2.5 min-w-0 transition-all duration-300 pt-2 mb-2">
       <img
-        src={APP_CONFIG.logo}
+        src="/aurys-icon.svg"
         alt={APP_CONFIG.name}
-        className="w-[170px] md:w-[190px] h-auto object-contain object-center shrink-0"
+        className="h-7 w-7 md:h-8 md:w-8 object-contain shrink-0 drop-shadow-sm"
       />
-      <div className="text-[11px] font-medium text-sidebar-foreground/70 leading-tight text-center -mt-4">
-        {APP_CONFIG.subtitle}
-      </div>
+      <span className="text-lg font-semibold tracking-tight text-white transition-all">
+        {APP_CONFIG.name}
+      </span>
     </div>
   );
 }

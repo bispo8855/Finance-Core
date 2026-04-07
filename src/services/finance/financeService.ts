@@ -13,10 +13,19 @@ export interface FinanceSnapshot {
 
 export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'> & {
   customInstallments?: { dueDate: string; value: number }[];
+  firstDueDate?: string;
 };
+
+export interface UserProfile {
+  id: string;
+  onboardingCompleted: boolean;
+}
 
 export interface IFinanceService {
   getSnapshot(): Promise<FinanceSnapshot>;
+  
+  getProfile(): Promise<UserProfile | null>;
+  updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile>;
   
   createDocument(
     payload: CreateDocumentPayload,

@@ -27,9 +27,8 @@ function DriverList({ title, items, icon: Icon, colorClass }: { title: string, i
         <h4 className="font-semibold text-sm">{title}</h4>
       </div>
       {items.length === 0 ? (
-        <p className="text-sm text-muted-foreground leading-relaxed">
-          Ainda não há dados suficientes neste período.<br/>
-          Registre receitas e despesas para identificar os principais impactos do negócio.
+        <p className="text-xs text-muted-foreground leading-relaxed italic">
+          Registre receitas para que o Aurys identifique padrões e impactos no seu resultado.
         </p>
       ) : (
         <div className="space-y-3">
@@ -56,7 +55,7 @@ function DriverList({ title, items, icon: Icon, colorClass }: { title: string, i
 export function ExecutiveDrivers({ drivers }: ExecutiveDriversProps) {
   return (
     <div className="space-y-4">
-      <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Principais Impactos</h3>
+      <h3 className="text-sm font-semibold text-muted-foreground/70 uppercase tracking-widest px-1">O que mais impacta seu resultado</h3>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <DriverList 
           title="Top Receitas" 

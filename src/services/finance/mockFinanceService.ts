@@ -1,6 +1,6 @@
 import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 import { initialCategories, initialAccounts, initialContacts, initialDocuments, initialTitles, initialMovements } from '@/data/mockData';
-import { IFinanceService, FinanceSnapshot, CreateDocumentPayload } from './financeService';
+import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile } from './financeService';
 
 // Mutable in-memory DB simulate persistent layer
 const categories = [...initialCategories];
@@ -9,11 +9,25 @@ const contacts = [...initialContacts];
 const documents = [...initialDocuments];
 const titles = [...initialTitles];
 const movements = [...initialMovements];
+let mockProfile: { onboarding_completed: boolean } | null = { onboarding_completed: false };
 
 const uid = () => 'id_' + Math.random().toString(36).substr(2, 9);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class MockFinanceService implements IFinanceService {
+  async getProfile(): Promise<UserProfile | null> {
+    await delay(200);
+    if (!mockProfile) return null;
+    return { id: 'mock-user', onboardingCompleted: mockProfile.onboarding_completed };
+  }
+
+  async updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile> {
+    await delay(200);
+    if (!mockProfile) mockProfile = { onboarding_completed: false };
+    if (payload.onboardingCompleted !== undefined) mockProfile.onboarding_completed = payload.onboardingCompleted;
+    return { id: 'mock-user', onboardingCompleted: mockProfile.onboarding_completed };
+  }
+
   async getSnapshot(): Promise<FinanceSnapshot> {
     await delay(300);
     return {
@@ -38,9 +52,10 @@ export class MockFinanceService implements IFinanceService {
     const newTitles: Title[] = [];
     const newMovements: Movement[] = [];
     const today = new Date().toISOString().split('T')[0];
+    const initialDate = payload.firstDueDate || payload.competenceDate;
 
     for (let i = 0; i < numInstallments; i++) {
-      const dueDate = new Date(payload.competenceDate);
+      const dueDate = new Date(initialDate + 'T12:00:00');
       dueDate.setMonth(dueDate.getMonth() + i);
       const titleId = uid();
       const title: Title = {

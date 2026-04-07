@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,10 +6,36 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Rocket, Info, TrendingUp, TrendingDown, DollarSign } from 'lucide-react';
 import { Toaster } from 'sonner';
+import { financeService } from '@/services/finance';
 
 export default function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+
+  useEffect(() => {
+    const migrateOnboarding = async () => {
+      try {
+        const profile = await financeService.getProfile();
+        const hasCompletedLocal = localStorage.getItem('hasCompletedOnboarding') === 'true';
+
+        if (profile?.onboardingCompleted) {
+          // Já completou no banco, sincroniza localStorage e vaza
+          if (!hasCompletedLocal) localStorage.setItem('hasCompletedOnboarding', 'true');
+          navigate('/lancar', { replace: true });
+          return;
+        }
+
+        if (hasCompletedLocal) {
+          // Completou local mas não no banco, migra
+          await financeService.updateProfile({ onboardingCompleted: true });
+          navigate('/lancar', { replace: true });
+        }
+      } catch (e) {
+        console.error('Erro na migração de onboarding:', e);
+      }
+    };
+    migrateOnboarding();
+  }, [navigate]);
 
   const [formData, setFormData] = useState({
     businessType: '',
@@ -18,14 +44,22 @@ export default function Onboarding() {
     estimatedCost: '',
   });
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
     localStorage.setItem('hasDismissedOnboarding', 'true');
-    navigate('/');
+    try {
+      await financeService.updateProfile({ onboardingCompleted: true }); // Skipping counts as completed for redirect purposes
+    } catch (e) {}
+    navigate('/', { replace: true });
   };
 
-  const handleComplete = () => {
+  const handleComplete = async () => {
     localStorage.setItem('hasCompletedOnboarding', 'true');
-    navigate('/lancar', { state: { from: 'onboarding' } });
+    try {
+      await financeService.updateProfile({ onboardingCompleted: true });
+    } catch (e) {
+      console.error('Erro ao persistir onboarding:', e);
+    }
+    navigate('/lancar', { state: { from: 'onboarding' }, replace: true });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -89,8 +123,8 @@ export default function Onboarding() {
         {step === 1 && (
           <Card className="border-none shadow-xl">
             <CardHeader>
-              <CardTitle className="text-2xl text-center">Bem-vindo ao FinançasCore</CardTitle>
-              <CardDescription className="text-center">Vamos configurar seu dashboard para gerar os primeiros insights.</CardDescription>
+              <CardTitle className="text-2xl text-center">Bem-vindo ao Aurys</CardTitle>
+              <CardDescription className="text-center">Vamos entender seu negócio em poucos minutos para gerar clareza estratégica.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
@@ -155,7 +189,7 @@ export default function Onboarding() {
                 onClick={() => setStep(3)}
                 disabled={!formData.estimatedRevenue && !formData.estimatedCost}
               >
-                Gerar Análise
+                Gerar Insights
               </Button>
             </CardFooter>
           </Card>
@@ -164,8 +198,8 @@ export default function Onboarding() {
         {step === 3 && (
           <Card className="border-none shadow-xl">
             <CardHeader>
-              <CardTitle className="text-xl text-center">Seu Retrato Inicial</CardTitle>
-              <CardDescription className="text-center">Esta é uma simulação de como seu painel vai ficar.</CardDescription>
+              <CardTitle className="text-xl text-center">Sua Visão Estratégica</CardTitle>
+              <CardDescription className="text-center">Esta é uma simulação de como sua visão geral vai te ajudar a decidir.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               

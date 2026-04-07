@@ -1,6 +1,6 @@
 export const APP_CONFIG = {
-  name: 'FinançasCore',
-  subtitle: 'Controle Financeiro Inteligente',
-  logo: '/logo-principal.png',
-  favicon: '/favicon.png',
+  name: 'Aurys',
+  subtitle: 'Clareza para decisões de negócio',
+  logo: '/aurys-logo.svg',
+  favicon: '/favicon.svg',
 };

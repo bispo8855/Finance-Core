@@ -1,4 +1,4 @@
-import { IFinanceService, FinanceSnapshot, CreateDocumentPayload } from './financeService';
+import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile } from './financeService';
 import { supabase } from '@/lib/supabaseClient';
 import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 
@@ -8,6 +8,41 @@ export class SupabaseFinanceService implements IFinanceService {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error('Usuário não autenticado no Supabase');
     return user.id;
+  }
+
+  async getProfile(): Promise<UserProfile | null> {
+    const userId = await this.getUserId();
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is code for no rows found
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      onboardingCompleted: data.onboarding_completed
+    };
+  }
+
+  async updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile> {
+    const userId = await this.getUserId();
+    const updateData: Record<string, unknown> = {};
+    if (payload.onboardingCompleted !== undefined) updateData.onboarding_completed = payload.onboardingCompleted;
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert({ id: userId, ...updateData })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return {
+      id: data.id,
+      onboardingCompleted: data.onboarding_completed
+    };
   }
 
   async getSnapshot(): Promise<FinanceSnapshot> {
@@ -57,7 +92,10 @@ export class SupabaseFinanceService implements IFinanceService {
         category_id: payload.categoryId,
         competence_date: payload.competenceDate,
         total_amount: payload.totalValue,
-        description: payload.description
+        description: payload.description,
+        gross_amount: payload.grossAmount,
+        marketplace_fee: payload.marketplaceFee,
+        shipping_cost: payload.shippingCost
       })
       .select()
       .single();
@@ -90,9 +128,12 @@ export class SupabaseFinanceService implements IFinanceService {
     } else {
       // Fallback: Automatic splitting logic
       const valuePerInstallment = Math.round((payload.totalValue / numInstallments) * 100) / 100;
+      const initialDate = payload.firstDueDate || payload.competenceDate;
+
       for (let i = 0; i < numInstallments; i++) {
-        const dueDate = new Date(payload.competenceDate);
+        const dueDate = new Date(initialDate + 'T12:00:00');
         dueDate.setMonth(dueDate.getMonth() + i);
+
         titlesToInsert.push({
           user_id: userId,
           document_id: doc.id,
@@ -375,7 +416,13 @@ export class SupabaseFinanceService implements IFinanceService {
   }
 
   async updateTitle(titleId: string, payload: { dueDate?: string; description?: string }): Promise<Title> {
-    console.log("SUPABASE SERVICE ATIVO - updateTitle");
+    console.log("SUPABASE SERVICE ATIVO - updateTitle", { titleId, payload });
+    
+    if (!titleId) throw new Error('ID do título é obrigatório.');
+    if (!payload.dueDate && payload.description === undefined) {
+       throw new Error('Nenhum dado fornecido para atualização do título.');
+    }
+
     const userId = await this.getUserId();
 
     const updateData: Record<string, unknown> = {};
@@ -391,9 +438,11 @@ export class SupabaseFinanceService implements IFinanceService {
       .single();
 
     if (error) {
-      console.error(error);
-      throw new Error('Erro ao atualizar título no Supabase.');
+      console.error('Erro detalhado Supabase (updateTitle):', error);
+      throw new Error(`Erro ao atualizar título no Supabase: ${error.message}`);
     }
+
+    if (!data) throw new Error('Título não encontrado ou não permitido para este usuário.');
 
     return this.mapTitle(data);
   }
@@ -701,7 +750,10 @@ export class SupabaseFinanceService implements IFinanceService {
       description: row.description || '',
       condition: row.condition || 'avista',
       installments: row.installments || 1,
-      createdAt: row.created_at
+      createdAt: row.created_at,
+      grossAmount: row.gross_amount ? Number(row.gross_amount) : undefined,
+      marketplaceFee: row.marketplace_fee ? Number(row.marketplace_fee) : undefined,
+      shippingCost: row.shipping_cost ? Number(row.shipping_cost) : undefined
     };
   }
 

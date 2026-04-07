@@ -25,6 +25,16 @@ export function ExecutiveSummary({ receitaLiquida, resultadoLiquido, margem, cai
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* 1. RESULTADO (FEATURED) */}
+      <KPICard 
+        title="Resultado" 
+        value={fmt(resultadoLiquido)} 
+        icon={resultadoLiquido >= 0 ? TrendingUp : TrendingDown} 
+        variant="featured" 
+        onClick={() => navigateToDRE(navigate)}
+      />
+      
+      {/* 2. RECEITA */}
       <KPICard 
         title="Receita Líquida" 
         value={fmt(receitaLiquida)} 
@@ -32,13 +42,8 @@ export function ExecutiveSummary({ receitaLiquida, resultadoLiquido, margem, cai
         variant="default" 
         onClick={() => navigateToDRE(navigate)}
       />
-      <KPICard 
-        title="Resultado" 
-        value={fmt(resultadoLiquido)} 
-        icon={resultadoLiquido >= 0 ? TrendingUp : TrendingDown} 
-        variant={resultadoLiquido >= 0 ? 'positive' : 'negative'} 
-        onClick={() => navigateToDRE(navigate)}
-      />
+
+      {/* 3. MARGEM */}
       <KPICard 
         title="Margem" 
         value={receitaLiquida > 0 ? margemPercentual : '0%'} 
@@ -47,6 +52,8 @@ export function ExecutiveSummary({ receitaLiquida, resultadoLiquido, margem, cai
         variant={margemVariant} 
         onClick={() => navigateToDRE(navigate)}
       />
+
+      {/* 4. CAIXA */}
       <KPICard 
         title="Caixa Atual" 
         value={fmt(caixaAtual)} 

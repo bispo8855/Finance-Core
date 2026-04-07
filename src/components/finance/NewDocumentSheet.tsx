@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { filterCategoriesForDocumentType, filterContactsForDocumentType } from '@/domain/finance/helpers';
+import { DocumentType } from '@/types/financial';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,6 +55,13 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
   const [paymentAccountId, setPaymentAccountId] = useState('');
   
   const [isLocked, setIsLocked] = useState(false);
+  const [dueDate, setDueDate] = useState('');
+  const [hasManuallySetDueDate, setHasManuallySetDueDate] = useState(false);
+
+  const [isMarketplace, setIsMarketplace] = useState(false);
+  const [grossAmount, setGrossAmount] = useState('');
+  const [marketplaceFee, setMarketplaceFee] = useState('');
+  const [shippingCost, setShippingCost] = useState('');
 
   const [openContactSelect, setOpenContactSelect] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
@@ -76,19 +84,23 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
           setSituation('previsto');
           setPaymentAccountId('');
           const docTitles = snapshot.titles.filter(t => t.documentId === editDocumentId);
+          if (docTitles.length > 0) setDueDate(docTitles[0].dueDate);
           setIsLocked(docTitles.some(t => t.status === 'pago' || t.status === 'recebido'));
         }
       } else {
         setFlowType(defaultSide === 'pagar' ? 'saida' : 'entrada');
         setContactId('');
         setCategoryId('');
-        setCompetenceDate(new Date().toISOString().split('T')[0]);
+        const today = new Date().toISOString().split('T')[0];
+        setCompetenceDate(today);
+        setDueDate(today);
+        setHasManuallySetDueDate(false);
         setTotalValue('');
         setDescription('');
         setCondition('avista');
         setInstallments('2');
         setSituation('previsto');
-        setPaymentDate(new Date().toISOString().split('T')[0]);
+        setPaymentDate(today);
         setPaymentAccountId('');
         setInstallmentsGrid([]);
         setHasManualEdits(false);
@@ -98,6 +110,23 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
       }
     }
   }, [open, editDocumentId, snapshot, defaultSide]);
+
+  useEffect(() => {
+    if (!hasManuallySetDueDate && !editDocumentId) {
+      setDueDate(competenceDate);
+    }
+  }, [competenceDate, hasManuallySetDueDate, editDocumentId]);
+
+  useEffect(() => {
+    if (isMarketplace) {
+      const gross = parseFloat(grossAmount) || 0;
+      const fee = parseFloat(marketplaceFee) || 0;
+      const shipping = parseFloat(shippingCost) || 0;
+      // Precision handle
+      const net = Math.round((gross - fee - shipping) * 100) / 100;
+      if (!isNaN(net)) setTotalValue(net.toString());
+    }
+  }, [isMarketplace, grossAmount, marketplaceFee, shippingCost]);
 
   useEffect(() => {
     if (condition !== 'parcelado' || hasManualEdits) return;
@@ -152,7 +181,7 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
   const activeAccounts = accounts.filter(a => a.isActive !== false);
 
   // Derive mapped types for helpers
-  const mappedDocumentType = flowType === 'entrada' ? 'receita' : 'despesa';
+  const mappedDocumentType = (flowType === 'entrada' ? 'receita' : 'despesa') as DocumentType;
   const isReceita = flowType === 'entrada';
   
   const filteredContacts = filterContactsForDocumentType(activeContacts, mappedDocumentType);
@@ -214,6 +243,10 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
         condition,
         installments: condition === 'parcelado' ? parseInt(installments) || 1 : 1,
         customInstallments: condition === 'parcelado' && hasManualEdits ? installmentsGrid : undefined,
+        firstDueDate: dueDate !== competenceDate ? dueDate : undefined,
+        grossAmount: isMarketplace ? parseFloat(grossAmount) : undefined,
+        marketplaceFee: isMarketplace ? parseFloat(marketplaceFee) : undefined,
+        shippingCost: isMarketplace ? parseFloat(shippingCost) : undefined,
       };
 
       if (editDocumentId) {
@@ -365,15 +398,85 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
 
           {/* 3. Valor + vencimento */}
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">3. Valor + vencimento</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-card shadow-sm p-5 rounded-xl border">
-              <div className="space-y-2">
-                <Label>Valor Total <span className="text-destructive">*</span></Label>
-                <Input autoFocus id="valor-input" onKeyDown={(e) => handleKeyDown(e, 'contact-trigger')} className="bg-background font-semibold text-xl h-12" disabled={isLocked} type="number" step="0.01" placeholder="0,00" value={totalValue} onChange={e => setTotalValue(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Data de Vencimento <span className="text-destructive">*</span></Label>
-                <Input className="bg-background h-12" disabled={isLocked} type="date" value={competenceDate} onChange={e => setCompetenceDate(e.target.value)} />
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">3. Valor + vencimento</h3>
+              {isReceita && (
+                <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20">
+                  <Switch id="mkt-mode" checked={isMarketplace} onCheckedChange={setIsMarketplace} />
+                  <Label htmlFor="mkt-mode" className="text-xs font-bold text-primary cursor-pointer uppercase tracking-tight">Modo Marketplace</Label>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4 bg-card shadow-sm p-5 rounded-xl border">
+              {isMarketplace ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2">
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Valor Bruto (MKT)</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
+                      <Input className="bg-background h-10 pl-8 font-medium" type="number" step="0.01" value={grossAmount} onChange={e => setGrossAmount(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Comissão / Taxas</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
+                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={marketplaceFee} onChange={e => setMarketplaceFee(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs uppercase text-muted-foreground">Frete / Logística</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
+                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={shippingCost} onChange={e => setShippingCost(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
+                <div className="space-y-2">
+                  <Label className={isMarketplace ? "text-xs uppercase text-primary font-bold" : ""}>
+                    {isMarketplace ? 'Valor Líquido a Receber' : 'Valor Total'} <span className="text-destructive">*</span>
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">R$</span>
+                    <Input 
+                      autoFocus 
+                      readOnly={isMarketplace}
+                      id="valor-input" 
+                      onKeyDown={(e) => handleKeyDown(e, 'contact-trigger')} 
+                      className={`bg-background font-semibold text-xl h-12 pl-10 ${isMarketplace ? 'bg-primary/5 border-primary/30 text-primary' : ''}`} 
+                      disabled={isLocked} 
+                      type="number" 
+                      step="0.01" 
+                      placeholder="0,00" 
+                      value={totalValue} 
+                      onChange={e => setTotalValue(e.target.value)} 
+                    />
+                    {isMarketplace && <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-primary font-bold uppercase">Calculado</div>}
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-[11px] uppercase text-muted-foreground">Data da Venda</Label>
+                    <Input className="bg-background h-12 text-center" disabled={isLocked} type="date" value={competenceDate} onChange={e => setCompetenceDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[11px] uppercase text-muted-foreground">Data Vencimento</Label>
+                    <Input 
+                      className={`bg-background h-12 text-center transition-colors ${dueDate !== competenceDate ? 'border-primary/50 bg-primary/5 font-semibold' : ''}`} 
+                      disabled={isLocked} 
+                      type="date" 
+                      value={dueDate} 
+                      onChange={e => {
+                        setDueDate(e.target.value);
+                        setHasManuallySetDueDate(true);
+                      }} 
+                    />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

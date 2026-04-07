@@ -1,5 +1,6 @@
 import { useState, useMemo, Fragment } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Lightbulb } from 'lucide-react';
 import { StatusBadge } from '@/components/shared/StatusBadge';
 import { PaymentModal } from '@/components/shared/PaymentModal';
 import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
@@ -130,8 +131,8 @@ export default function Payables() {
         }
       }
     });
-
-    return { totalPagar, totalPago, vencido, aVencer };
+    
+    return { totalPagar, totalPago, vencido, aVencer, count: filtered.length };
   }, [filtered, snapshot, todayStr]);
 
   if (isLoading || !snapshot) return <div className="p-8 text-center text-muted-foreground">Carregando títulos...</div>;
@@ -171,18 +172,38 @@ export default function Payables() {
 
   return (
     <div className="space-y-6 max-w-7xl">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-destructive-subtle flex items-center justify-center">
-          <ArrowUpFromLine className="w-5 h-5 text-negative" />
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
+            <span>Aurys</span>
+            <span className="text-muted-foreground/30">|</span>
+            <span>Contas a Pagar</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">Contas a Pagar</h1>
+            <div className="px-2 py-0.5 rounded-full bg-destructive-subtle/50 text-negative text-[10px] font-bold border border-destructive/10">
+              {filtered.length} título(s)
+            </div>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">Contas a Pagar</h1>
-          <p className="text-sm text-muted-foreground">{filtered.length} título(s)</p>
-        </div>
-        <Button className="ml-auto" onClick={() => { setEditDocumentId(null); setSheetOpen(true); }}>
+        <Button onClick={() => { setEditDocumentId(null); setSheetOpen(true); }}>
           + Novo a pagar
         </Button>
       </div>
+
+      {summaryMetrics.vencido > 0 && (
+        <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/40 animate-in fade-in slide-in-from-top-2 duration-700">
+          <div className="bg-primary/10 p-1.5 rounded-lg shrink-0">
+            <Lightbulb className="w-4 h-4 text-primary" />
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold text-foreground">Insight do Aurys</p>
+            <p className="text-xs text-muted-foreground leading-relaxed italic">
+              "O Aurys identificou {fmt(summaryMetrics.vencido)} em contas vencidas. Regularize para evitar juros e manter seu crédito."
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 animate-fade-in">
         <KPICard 
@@ -347,6 +368,17 @@ export default function Payables() {
                 <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">Nenhum título encontrado.</td></tr>
               )}
             </tbody>
+            <tfoot className="border-t bg-muted/20 font-semibold group">
+              <tr>
+                <td colSpan={4} className="px-4 py-4 text-right text-muted-foreground">
+                  Total do Filtro ({summaryMetrics.count} título{summaryMetrics.count !== 1 ? 's' : ''}):
+                </td>
+                <td className="px-4 py-4 text-right text-foreground">
+                  {fmt(filtered.reduce((acc, t) => acc + t.value, 0))}
+                </td>
+                <td colSpan={4}></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>

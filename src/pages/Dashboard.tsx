@@ -13,6 +13,9 @@ import { ExecutiveSummary } from '@/components/dashboard/ExecutiveSummary';
 import { ManagerialAlerts } from '@/components/dashboard/ManagerialAlerts';
 import { ExecutiveDrivers } from '@/components/dashboard/ExecutiveDrivers';
 import { EvolutionChart } from '@/components/dashboard/EvolutionChart';
+import { AurysRecommendationsPanel } from '@/components/dashboard/AurysRecommendationsPanel';
+import { useRecommendations } from '@/hooks/finance/useRecommendations';
+import { Lightbulb, Target, ShieldCheck } from 'lucide-react';
 
 const SummarySkeleton = () => (
   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -43,37 +46,51 @@ const CardSkeleton = () => (
 function DashboardHeader({ monthStr }: { monthStr: string }) {
   const { data, isLoading } = useDashboardSummary(monthStr);
   const statusGeral = data?.statusGeral;
+  const mainInsight = data?.insights && data.insights.length > 0 ? data.insights[0] : null;
 
   return (
-    <div>
-      <div className="flex items-center gap-3">
-        <h1 className="text-3xl font-bold tracking-tight">Visão Geral</h1>
-        {isLoading && <div className="w-24 h-6 bg-muted rounded-full animate-pulse" />}
-        {!isLoading && statusGeral && (
-          <div className={`px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border shadow-sm ${
-            statusGeral.status === 'saudavel' ? 'bg-positive/10 text-positive border-positive/20' :
-            statusGeral.status === 'atencao' ? 'bg-warning/10 text-warning border-warning/20' :
-            'bg-destructive/10 text-destructive border-destructive/20'
-          }`}>
-            <div className={`w-1.5 h-1.5 rounded-full ${
-              statusGeral.status === 'saudavel' ? 'bg-positive' :
-              statusGeral.status === 'atencao' ? 'bg-warning' :
-              'bg-destructive'
-            }`} />
-            {statusGeral.status === 'saudavel' ? 'Saudável' :
-             statusGeral.status === 'atencao' ? 'Atenção' : 'Crítico'}
-          </div>
-        )}
+    <div className="space-y-4">
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
+          <span>Aurys</span>
+          <span className="text-muted-foreground/30">|</span>
+          <span>Minha Empresa</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">Visão Geral</h1>
+          {!isLoading && statusGeral && (
+            <div className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1.5 border transition-all ${
+              statusGeral.status === 'saudavel' ? 'bg-positive/5 text-positive/70 border-positive/10' :
+              statusGeral.status === 'atencao' ? 'bg-warning/5 text-warning/70 border-warning/10' :
+              'bg-destructive/5 text-destructive/70 border-destructive/10'
+            }`}>
+              <div className={`w-1 h-1 rounded-full ${
+                statusGeral.status === 'saudavel' ? 'bg-positive/50' :
+                statusGeral.status === 'atencao' ? 'bg-warning/50' :
+                'bg-destructive/50'
+              }`} />
+              {statusGeral.status === 'saudavel' ? 'Saudável' :
+               statusGeral.status === 'atencao' ? 'Atenção' : 'Crítico'}
+            </div>
+          )}
+        </div>
       </div>
-      <p className="text-sm text-muted-foreground mt-1 flex items-center gap-2">
-        <span>Cockpit Gerencial • Mês atual ({new Date().toLocaleString('pt-BR', { month: 'long', year: 'numeric' })})</span>
-        {statusGeral?.message && (
-          <>
-            <span className="text-muted-foreground/30">•</span>
-            <span className="animate-fade-in">{statusGeral.message}</span>
-          </>
-        )}
-      </p>
+
+      {!isLoading && statusGeral && (
+        <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/40 animate-in fade-in slide-in-from-top-2 duration-700">
+          <div className="bg-primary/10 p-1.5 rounded-lg shrink-0">
+            <Lightbulb className="w-4 h-4 text-primary" />
+          </div>
+          <div className="space-y-0.5">
+            <p className="text-sm font-semibold text-foreground">
+              {mainInsight ? 'Insight do Aurys' : (statusGeral.status === 'saudavel' ? 'Análise estratégica' : 'Observação importante')}
+            </p>
+            <p className="text-xs text-muted-foreground leading-relaxed italic">
+              {mainInsight ? `"${mainInsight}"` : (statusGeral.message || 'O Aurys precisa de mais dados para gerar análises específicas.')}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -88,6 +105,11 @@ function AlertsSection({ monthStr }: { monthStr: string }) {
   const { data, isLoading } = useDashboardAlerts(monthStr);
   if (isLoading || !data) return <AlertsSkeleton />;
   return <div className="animate-fade-in"><ManagerialAlerts alertas={data.alertas} insights={data.insights} /></div>;
+}
+
+function RecommendationsSection({ monthStr }: { monthStr: string }) {
+  const { recommendations, isLoading } = useRecommendations(monthStr);
+  return <div className="animate-fade-in"><AurysRecommendationsPanel recommendations={recommendations} isLoading={isLoading} /></div>;
 }
 
 function DriversSection({ monthStr }: { monthStr: string }) {
@@ -123,13 +145,13 @@ export default function Dashboard() {
         <div className="flex items-center gap-3 mt-4 md:mt-0">
           <Button variant="outline" onClick={() => navigate('/dre')} className="gap-2">
             <BarChart3 className="w-4 h-4 text-muted-foreground" />
-             DRE Completo
+             Ver Análise de Resultado
           </Button>
           <Button variant="outline" onClick={() => navigate('/precificacao')} className="gap-2">
             <Calculator className="w-4 h-4 text-muted-foreground" />
              Precificação
           </Button>
-          <Button onClick={() => navigate('/lancar')} className="gap-1.5 ml-2">
+          <Button variant="secondary" onClick={() => navigate('/lancar')} className="gap-1.5 ml-2">
             <Plus className="w-4 h-4" /> Novo
           </Button>
         </div>
@@ -137,6 +159,9 @@ export default function Dashboard() {
 
       {/* RESUMO EXECUTIVO */}
       <SummarySection monthStr={monthStr} />
+
+      {/* RECOMENDAÇÕES DO AURYS (DECISION ENGINE) */}
+      <RecommendationsSection monthStr={monthStr} />
 
       {/* ALERTS & INSIGHTS */}
       <AlertsSection monthStr={monthStr} />

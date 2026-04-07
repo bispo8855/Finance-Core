@@ -45,6 +45,10 @@ export interface FinancialDocument {
   condition: 'avista' | 'parcelado';
   installments: number;
   createdAt: string;
+  // Marketplace fields
+  grossAmount?: number;
+  marketplaceFee?: number;
+  shippingCost?: number;
 }
 
 export interface Title {

@@ -2,6 +2,7 @@ import {
   LayoutDashboard, FilePlus, ArrowDownToLine, ArrowUpFromLine,
   TrendingUp, BarChart3, Tags, Building2, Users, Settings, LogOut, History, Calculator
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { AppBrand } from '@/components/shared/AppBrand';
 import { NavLink } from '@/components/NavLink';
 import { useLocation } from 'react-router-dom';
@@ -13,17 +14,17 @@ import {
 } from '@/components/ui/sidebar';
 
 const mainNav = [
-  { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  { title: 'Visão Geral', url: '/', icon: LayoutDashboard },
   { title: 'Lançar', url: '/lancar', icon: FilePlus },
   { title: 'Contas a Receber', url: '/receber', icon: ArrowDownToLine },
   { title: 'Contas a Pagar', url: '/pagar', icon: ArrowUpFromLine },
-  { title: 'Lançamentos', url: '/lancamentos', icon: History },
   { title: 'Fluxo de Caixa', url: '/fluxo', icon: TrendingUp },
-  { title: 'DRE', url: '/dre', icon: BarChart3 },
+  { title: 'Análise de Resultado (DRE)', url: '/dre', icon: BarChart3 },
   { title: 'Precificação', url: '/precificacao', icon: Calculator },
 ];
 
 const registrationNav = [
+  { title: 'Lançamentos', url: '/lancamentos', icon: History },
   { title: 'Categorias', url: '/categorias', icon: Tags },
   { title: 'Contas', url: '/contas', icon: Building2 },
   { title: 'Contatos', url: '/contatos', icon: Users },
@@ -38,7 +39,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-4 py-5">
+      <SidebarHeader className="px-6 py-8">
         <AppBrand collapsed={collapsed} />
       </SidebarHeader>
 
@@ -55,10 +56,10 @@ export function AppSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === '/'}
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/10 transition-all rounded-lg"
+                      activeClassName="bg-primary/10 text-primary font-bold shadow-sm"
                     >
-                      <item.icon className="w-4 h-4 shrink-0" />
+                      <item.icon className={cn("w-4 h-4 shrink-0", isActive(item.url) && "text-primary")} />
                       {!collapsed && <span>{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
@@ -67,8 +68,10 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
-
-        <SidebarSeparator />
+        
+        <div className="py-4" />
+        <SidebarSeparator className="opacity-20" />
+        <div className="py-4" />
 
         <SidebarGroup>
           <SidebarGroupLabel className="text-sidebar-foreground/40 uppercase text-[10px] tracking-widest font-semibold">
@@ -81,8 +84,8 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild tooltip={item.title}>
                     <NavLink
                       to={item.url}
-                      className="hover:bg-sidebar-accent/80"
-                      activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                      className="text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent/30 transition-all rounded-lg"
+                      activeClassName="bg-primary/10 text-primary font-bold shadow-sm"
                     >
                       <item.icon className="w-4 h-4 shrink-0" />
                       {!collapsed && <span>{item.title}</span>}
@@ -103,8 +106,8 @@ export function AppSidebar() {
                 <SidebarMenuButton asChild tooltip="Configurações">
                   <NavLink
                     to="/configuracoes"
-                    className="hover:bg-sidebar-accent/80"
-                    activeClassName="bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                    className="text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-colors"
+                    activeClassName="bg-primary/15 text-primary font-bold"
                   >
                     <Settings className="w-4 h-4 shrink-0" />
                     {!collapsed && <span>Configurações</span>}

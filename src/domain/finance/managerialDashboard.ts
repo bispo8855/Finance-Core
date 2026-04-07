@@ -87,20 +87,44 @@ export function calculateBaseMetrics(params: CalcParams): BaseMetrics {
 
   const curMonthDocs = params.documents.filter(d => d.competenceDate.startsWith(params.currentMonthISO));
   
-  const dreTotal = (docs: FinancialDocument[], dClass: string) => docs
-    .filter(d => {
-      const c = params.categories.find(cat => cat.id === d.categoryId);
-      return c ? getDreClass(c) === dClass : false;
-    })
-    .reduce((acc, d) => acc + d.totalValue, 0);
 
-  const receitaBruta = dreTotal(curMonthDocs, 'receita_bruta');
-  const deducoes = dreTotal(curMonthDocs, 'deducao_imposto');
+  // 1. Receita Bruta: soma normal das categorias + grossAmount dos docs marketplace
+  const normalReceitaBruta = curMonthDocs.filter(d => {
+    const c = params.categories.find(cat => cat.id === d.categoryId);
+    return c && getDreClass(c) === 'receita_bruta' && !d.grossAmount;
+  }).reduce((acc, d) => acc + d.totalValue, 0);
+  
+  const mktGross = curMonthDocs.reduce((acc, d) => acc + (d.grossAmount || 0), 0);
+  const receitaBruta = normalReceitaBruta + mktGross;
+
+  // 2. Deduções
+  const deducoes = curMonthDocs.filter(d => {
+    const c = params.categories.find(cat => cat.id === d.categoryId);
+    return c && getDreClass(c) === 'deducao_imposto';
+  }).reduce((acc, d) => acc + d.totalValue, 0);
+
   const receitaLiquida = receitaBruta - deducoes;
-  const custosVariaveis = dreTotal(curMonthDocs, 'custo_variavel');
+  // 3. Custos Variáveis: categorias normais + mktFees + mktShipping
+  const normalCustosVariaveis = curMonthDocs.filter(d => {
+    const c = params.categories.find(cat => cat.id === d.categoryId);
+    return c && getDreClass(c) === 'custo_variavel';
+  }).reduce((acc, d) => acc + d.totalValue, 0);
+
+  const mktCosts = curMonthDocs.reduce((acc, d) => acc + (d.marketplaceFee || 0) + (d.shippingCost || 0), 0);
+  const custosVariaveis = normalCustosVariaveis + mktCosts;
+
   const margemContribuicao = receitaLiquida - custosVariaveis;
-  const despesasFixas = dreTotal(curMonthDocs, 'despesa_fixa');
-  const financeiro = dreTotal(curMonthDocs, 'financeiro');
+  
+  const despesasFixas = curMonthDocs.filter(d => {
+    const c = params.categories.find(cat => cat.id === d.categoryId);
+    return c && getDreClass(c) === 'despesa_fixa';
+  }).reduce((acc, d) => acc + d.totalValue, 0);
+
+  const financeiro = curMonthDocs.filter(d => {
+    const c = params.categories.find(cat => cat.id === d.categoryId);
+    return c && getDreClass(c) === 'financeiro';
+  }).reduce((acc, d) => acc + d.totalValue, 0);
+
   const resultadoLiquido = margemContribuicao - despesasFixas - financeiro;
   const margem = receitaLiquida > 0 ? (resultadoLiquido / receitaLiquida) : 0;
 

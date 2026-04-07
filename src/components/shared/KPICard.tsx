@@ -5,23 +5,25 @@ interface KPICardProps {
   title: string;
   value: string;
   icon: LucideIcon;
-  variant?: 'default' | 'positive' | 'negative' | 'warning';
+  variant?: 'default' | 'featured' | 'positive' | 'negative' | 'warning';
   subtitle?: string;
   onClick?: () => void;
 }
 
 const variantStyles = {
-  default: 'bg-card',
-  positive: 'bg-card border-l-4 border-l-success',
-  negative: 'bg-card border-l-4 border-l-destructive',
-  warning: 'bg-card border-l-4 border-l-warning',
+  default: 'bg-card border-border shadow-sm',
+  featured: 'bg-muted/20 border-border/40 shadow-md ring-1 ring-primary/5',
+  positive: 'bg-positive/5 border-positive/10 shadow-sm',
+  negative: 'bg-destructive/5 border-destructive/10 shadow-sm',
+  warning: 'bg-warning/5 border-warning/10 shadow-sm',
 };
 
 const iconBg = {
-  default: 'bg-accent text-accent-foreground',
-  positive: 'bg-success-subtle text-positive',
-  negative: 'bg-destructive-subtle text-negative',
-  warning: 'bg-warning-subtle text-warning',
+  default: 'bg-accent/50 text-accent-foreground',
+  featured: 'bg-primary/10 text-primary',
+  positive: 'bg-positive/10 text-positive',
+  negative: 'bg-destructive/10 text-negative',
+  warning: 'bg-warning/10 text-warning',
 };
 
 export function KPICard({ title, value, icon: Icon, variant = 'default', subtitle, onClick }: KPICardProps) {

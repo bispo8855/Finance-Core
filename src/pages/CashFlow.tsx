@@ -124,13 +124,17 @@ export default function CashFlow() {
 
   return (
     <div className="space-y-6 max-w-7xl pb-16">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
-          <TrendingUp className="w-5 h-5 text-accent-foreground" />
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
+          <span>Aurys</span>
+          <span className="text-muted-foreground/30">|</span>
+          <span>Fluxo de Caixa</span>
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">Fluxo de Caixa</h1>
-          <p className="text-sm text-muted-foreground">Projeção e decisão financeira</p>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Fluxo de Caixa</h1>
+          <div className="px-2 py-0.5 rounded-full bg-accent/50 text-accent-foreground text-[10px] font-bold border border-border/10">
+            Projeção {rangeDays} dias
+          </div>
         </div>
       </div>
 

@@ -127,11 +127,14 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Finanças<span className="text-primary">Core</span>
-          </h1>
-          <p className="text-muted-foreground text-sm">
+        <div className="text-center space-y-4 flex flex-col items-center">
+          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-1000">
+            <img src="/aurys-icon.svg" alt="Aurys" className="w-10 h-10 object-contain drop-shadow-sm" />
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+              Aurys
+            </h1>
+          </div>
+          <p className="text-muted-foreground text-sm animate-in fade-in duration-1000 delay-300">
             {isSignUp ? 'Crie sua conta para começar' : 'Acesse sua conta para continuar'}
           </p>
         </div>

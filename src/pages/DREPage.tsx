@@ -47,9 +47,11 @@ export default function DREPage() {
         <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center">
           <BarChart3 className="w-5 h-5 text-accent-foreground" />
         </div>
-        <div>
-          <h1 className="text-2xl font-bold">DRE — Demonstrativo de Resultado</h1>
-          <p className="text-sm text-muted-foreground">Resultado por competência</p>
+        <div className="space-y-0.5">
+          <h1 className="text-2xl font-bold tracking-tight">Análise de Resultado</h1>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            O Aurys interpreta sua DRE e identifica os principais impactos no seu resultado
+          </p>
         </div>
       </div>
 
