@@ -39,7 +39,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-6 py-8">
+      <SidebarHeader className="px-4 py-8">
         <AppBrand collapsed={collapsed} />
       </SidebarHeader>
 

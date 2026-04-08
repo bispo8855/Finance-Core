@@ -128,14 +128,15 @@ export default function Login() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-4 flex flex-col items-center">
-          <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-4 duration-1000">
-            <img src="/aurys-icon.svg" alt="Aurys" className="w-10 h-10 object-contain drop-shadow-sm" />
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
-              Aurys
-            </h1>
+          <div className="flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-1000 mb-8">
+            <img 
+              src="/aurys-logo-dark.png" 
+              alt="Aurys" 
+              className="h-[100px] w-auto object-contain" 
+            />
           </div>
           <p className="text-muted-foreground text-sm animate-in fade-in duration-1000 delay-300">
-            {isSignUp ? 'Crie sua conta para começar' : 'Acesse sua conta para continuar'}
+            {isSignUp ? 'Crie sua conta para começar' : 'Acesse sua conta'}
           </p>
         </div>
 
@@ -182,7 +183,7 @@ export default function Login() {
                             required
                           />
                         </div>
-                        <Button type="submit" className="w-full" disabled={isResetLoading || !resetEmail}>
+                        <Button type="submit" className="w-full h-11" disabled={isResetLoading || !resetEmail}>
                           {isResetLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                           Enviar link de redefinição
                         </Button>
@@ -207,7 +208,7 @@ export default function Login() {
               </p>
             )}
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full h-11" disabled={isLoading}>
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {isSignUp ? 'Criar Conta' : 'Entrar'}
             </Button>

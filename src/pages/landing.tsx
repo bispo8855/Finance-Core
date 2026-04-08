@@ -15,7 +15,7 @@ export default function Landing() {
       {/* HEADER */}
       <header className="container mx-auto px-4 py-4 flex items-center justify-between border-b border-muted/20">
         <div className="flex items-center gap-2">
-          <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-8 w-auto" />
+          <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-12 w-auto" />
         </div>
         <div className="flex items-center gap-4">
           <Button variant="ghost" asChild className="hidden sm:inline-flex">
@@ -204,7 +204,7 @@ export default function Landing() {
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-primary/10 to-transparent"></div>
         <div className="container mx-auto px-4 text-center relative z-10 space-y-10">
           <div className="space-y-6">
-            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-10 mx-auto opacity-80" />
+            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-20 mx-auto opacity-90" />
             <h2 className="text-4xl font-extrabold tracking-tight lg:text-6xl text-white max-w-4xl mx-auto">
               Transforme incerteza em estratégia hoje mesmo.
             </h2>
@@ -226,7 +226,7 @@ export default function Landing() {
       <footer className="py-12 border-t bg-muted/20">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-8">
           <div className="flex items-center gap-2 grayscale brightness-200 opacity-60">
-            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-6" />
+            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-10" />
           </div>
           <p className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} Aurys. {APP_CONFIG.subtitle}.
