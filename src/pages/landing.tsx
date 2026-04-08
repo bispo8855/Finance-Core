@@ -13,15 +13,15 @@ export default function Landing() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/30 flex flex-col">
       {/* HEADER */}
-      <header className="container mx-auto px-4 py-4 flex items-center justify-between border-b border-muted/20">
+      <header className="container mx-auto px-4 py-6 flex items-center justify-between border-b border-muted/20">
         <div className="flex items-center gap-2">
-          <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-12 w-auto" />
+          <img src="/aurys-logo-dark.png" alt="Aurys Logo" className="h-20 w-auto" />
         </div>
         <div className="flex items-center gap-4">
           <Button variant="ghost" asChild className="hidden sm:inline-flex">
             <Link to="/login">Entrar</Link>
           </Button>
-          <Button asChild size="sm" className="bg-primary text-primary-foreground rounded-lg px-4">
+          <Button asChild size="lg" className="bg-primary text-primary-foreground rounded-xl px-6">
             <Link to="/login?signup=true">Começar agora</Link>
           </Button>
         </div>
@@ -203,9 +203,9 @@ export default function Landing() {
       <section className="bg-slate-900 border-t border-white/5 py-24 lg:py-32 relative overflow-hidden">
         <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-primary/10 to-transparent"></div>
         <div className="container mx-auto px-4 text-center relative z-10 space-y-10">
-          <div className="space-y-6">
-            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-20 mx-auto opacity-90" />
-            <h2 className="text-4xl font-extrabold tracking-tight lg:text-6xl text-white max-w-4xl mx-auto">
+          <div className="space-y-8">
+            <img src="/aurys-logo.png" alt="Aurys Logo" className="h-32 mx-auto opacity-90" />
+            <h2 className="text-4xl font-extrabold tracking-tight lg:text-6xl text-white max-w-4xl mx-auto leading-tight">
               Transforme incerteza em estratégia hoje mesmo.
             </h2>
             <p className="text-xl text-slate-400 max-w-2xl mx-auto">
@@ -223,10 +223,10 @@ export default function Landing() {
       </section>
 
       {/* FOOTER */}
-      <footer className="py-12 border-t bg-muted/20">
+      <footer className="py-16 border-t bg-muted/20">
         <div className="container mx-auto px-4 flex flex-col md:flex-row justify-between items-center gap-8">
-          <div className="flex items-center gap-2 grayscale brightness-200 opacity-60">
-            <img src={APP_CONFIG.logo} alt="Aurys Logo" className="h-10" />
+          <div className="flex items-center gap-2 grayscale opacity-40">
+            <img src="/aurys-logo-dark.png" alt="Aurys Logo" className="h-16" />
           </div>
           <p className="text-sm text-muted-foreground">
             © {new Date().getFullYear()} Aurys. {APP_CONFIG.subtitle}.
