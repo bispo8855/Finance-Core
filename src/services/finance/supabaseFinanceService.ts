@@ -419,15 +419,16 @@ export class SupabaseFinanceService implements IFinanceService {
     console.log("SUPABASE SERVICE ATIVO - updateTitle", { titleId, payload });
     
     if (!titleId) throw new Error('ID do título é obrigatório.');
-    if (!payload.dueDate && payload.description === undefined) {
-       throw new Error('Nenhum dado fornecido para atualização do título.');
+    if (!payload.dueDate) {
+       throw new Error('Nenhum dado válido fornecido para atualização do título (apenas data de vencimento é permitida).');
     }
 
     const userId = await this.getUserId();
 
     const updateData: Record<string, unknown> = {};
     if (payload.dueDate !== undefined) updateData.due_date = payload.dueDate;
-    if (payload.description !== undefined) updateData.description = payload.description;
+    // Removendo 'description' pois não existe na tabela 'titles' do Supabase.
+    // Futuramente, se necessário, poderíamos atualizar a 'description' na tabela 'documents'.
 
     const { data, error } = await supabase
       .from('titles')

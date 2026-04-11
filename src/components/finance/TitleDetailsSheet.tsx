@@ -22,16 +22,20 @@ export function TitleDetailsSheet({ open, onOpenChange, titleId }: TitleDetailsS
   const { toast } = useToast();
 
   const [dueDate, setDueDate] = useState('');
-  const [description, setDescription] = useState('');
 
   const title = snapshot?.titles.find(t => t.id === titleId);
-  // Se está pago ou recebido, não permite editar
-  const isSettled = title?.status === 'pago' || title?.status === 'recebido';
+  const document = snapshot?.documents.find(d => d.id === title?.documentId);
+  const contact = snapshot?.contacts.find(c => c.id === document?.contactId);
+
+  // Se tem data de baixa, ID de movimento ou status finalizado, não permite editar
+  const isSettled = !!title?.settledAt || 
+                    !!title?.settlementMovementId || 
+                    title?.status === 'pago' || 
+                    title?.status === 'recebido';
 
   useEffect(() => {
     if (open && title) {
       setDueDate(title.dueDate);
-      setDescription(title.description || '');
     }
   }, [open, title]);
 
@@ -42,7 +46,7 @@ export function TitleDetailsSheet({ open, onOpenChange, titleId }: TitleDetailsS
     try {
       await updateTitle({
         titleId: title.id,
-        payload: { dueDate, description }
+        payload: { dueDate }
       });
       toast({ title: 'Título atualizado com sucesso!' });
       onOpenChange(false);
@@ -64,22 +68,20 @@ export function TitleDetailsSheet({ open, onOpenChange, titleId }: TitleDetailsS
         </DialogHeader>
         
         <div className="space-y-4 py-4">
-          <div className="flex justify-between items-center bg-muted p-3 rounded-lg text-sm">
-            <span className="font-semibold text-lg">
-              R$ {title.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </span>
+          <div className="flex justify-between items-center bg-muted p-4 rounded-lg">
+            <div className="flex flex-col">
+              <span className="text-xs text-muted-foreground uppercase font-bold">Valor da Parcela</span>
+              <span className="font-semibold text-2xl">
+                R$ {title.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </span>
+            </div>
             <StatusBadge status={title.status as import('@/types/financial').TitleStatus} />
           </div>
 
-          <div className="space-y-2">
-            <Label>Descrição</Label>
-            <Textarea 
-              value={description} 
-              onChange={e => setDescription(e.target.value)}
-              placeholder="Ex: Parcela 1/3"
-              disabled={isSettled}
-              className="resize-none"
-            />
+          <div className="space-y-1 p-3 border rounded-lg bg-card">
+            <Label className="text-[10px] uppercase text-muted-foreground font-bold">Contexto do Lançamento</Label>
+            <p className="text-sm font-medium">{document?.description || 'Sem descrição'}</p>
+            <p className="text-xs text-muted-foreground">{contact?.name}</p>
           </div>
 
           <div className="space-y-2">
@@ -89,13 +91,16 @@ export function TitleDetailsSheet({ open, onOpenChange, titleId }: TitleDetailsS
               value={dueDate} 
               onChange={e => setDueDate(e.target.value)} 
               disabled={isSettled}
+              className="h-10"
             />
           </div>
 
           {isSettled && (
-             <p className="text-xs text-muted-foreground mt-2">
-               Este título já possui baixas vinculadas e não pode ser editado.
-             </p>
+             <div className="bg-amber-50 border border-amber-200 p-3 rounded-md mt-2">
+               <p className="text-xs text-amber-800 font-medium">
+                 Este título já foi baixado. Para alterar dados financeiros, realize o estorno da baixa antes.
+               </p>
+             </div>
           )}
         </div>
 
@@ -104,7 +109,7 @@ export function TitleDetailsSheet({ open, onOpenChange, titleId }: TitleDetailsS
             Sair
           </Button>
           {!isSettled && (
-            <Button onClick={handleSave} disabled={isPending || !dueDate}>
+            <Button onClick={handleSave} disabled={isPending || !dueDate || dueDate === title.dueDate}>
               {isPending ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           )}

@@ -254,7 +254,7 @@ export class MockFinanceService implements IFinanceService {
 
     const updatedTitle = { ...titles[titleIndex] };
     if (payload.dueDate !== undefined) updatedTitle.dueDate = payload.dueDate;
-    if (payload.description !== undefined) updatedTitle.description = payload.description;
+    // Removendo 'description' pois não existe na tabela 'titles' do Supabase.
 
     titles[titleIndex] = updatedTitle;
     return updatedTitle;
