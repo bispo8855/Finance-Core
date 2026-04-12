@@ -33,13 +33,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // Timer de segurança para evitar que o app fique travado em loading infinito
+    const safetyTimer = setTimeout(() => {
+      if (isLoading) {
+        console.warn('AuthContext: Tempo limite de busca de sessão atingido. Forçando encerramento do loading.');
+        setIsLoading(false);
+      }
+    }, 5000); // 5 segundos é mais que suficiente para um getSession
+
     // Busca a sessão atual no load inicial
     console.log('AuthContext: Iniciando busca de sessão inicial...');
     supabase.auth.getSession().then(({ data: { session }, error }) => {
+      clearTimeout(safetyTimer);
       if (error) {
         console.error('AuthContext: Erro ao buscar sessão inicial', error);
       } else if (session) {
-        console.log('AuthContext: Sessão inicial encontrada (Usuário:', session.user.id, ')');
+        console.log('AuthContext: Sessão inicial encontrada (ID:', session.user.id, 'Email:', session.user.email, ')');
       } else {
         console.log('AuthContext: Nenhuma sessão inicial encontrada.');
       }
@@ -47,6 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(session?.user ?? null);
       setIsLoading(false);
     }).catch(err => {
+      clearTimeout(safetyTimer);
       console.error('AuthContext: Falha catastrófica ao obter sessão', err);
       setIsLoading(false);
     });
@@ -55,16 +65,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`AuthContext: Mudança de estado detectada -> [${event}]`);
       if (session) {
-        console.log('AuthContext: Sessão recebida no listener (Usuário:', session.user.id, ')');
+        console.log('AuthContext: Sessão ativa após evento [', event, '] (ID:', session.user.id, ')');
       } else {
-        console.log('AuthContext: Sessão ausente no listener');
+        console.log('AuthContext: Sessão encerrada ou ausente após evento [', event, ']');
       }
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
     });
 
-    return () => subscription?.unsubscribe();
+    return () => {
+      clearTimeout(safetyTimer);
+      subscription?.unsubscribe();
+    };
   }, []);
 
   const signOut = async () => {

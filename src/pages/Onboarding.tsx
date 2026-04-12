@@ -11,27 +11,34 @@ import { financeService } from '@/services/finance';
 export default function Onboarding() {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [isCheckingProfile, setIsCheckingProfile] = useState(true);
 
   useEffect(() => {
     const migrateOnboarding = async () => {
       try {
+        console.log('Onboarding: Verificando estado do perfil...');
         const profile = await financeService.getProfile();
         const hasCompletedLocal = localStorage.getItem('hasCompletedOnboarding') === 'true';
 
         if (profile?.onboardingCompleted) {
-          // Já completou no banco, sincroniza localStorage e vaza
+          console.log('Onboarding: Perfil já completou onboarding no banco. Redirecionando...');
           if (!hasCompletedLocal) localStorage.setItem('hasCompletedOnboarding', 'true');
           navigate('/lancar', { replace: true });
           return;
         }
 
         if (hasCompletedLocal) {
-          // Completou local mas não no banco, migra
+          console.log('Onboarding: LocalStorage indica concluído mas banco não. Migrando...');
           await financeService.updateProfile({ onboardingCompleted: true });
           navigate('/lancar', { replace: true });
+          return;
         }
+        
+        console.log('Onboarding: Usuário novo ou onboarding pendente. Iniciando fluxo.');
+        setIsCheckingProfile(false);
       } catch (e) {
         console.error('Erro na migração de onboarding:', e);
+        setIsCheckingProfile(false);
       }
     };
     migrateOnboarding();
@@ -106,6 +113,19 @@ export default function Onboarding() {
   const marginStr = parseCurrency(formData.estimatedRevenue) > 0 
       ? ((projectedProfit / parseCurrency(formData.estimatedRevenue)) * 100).toFixed(1) + '%'
       : '0%';
+
+  if (isCheckingProfile) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-slate-50">
+        <div className="bg-white p-8 rounded-3xl shadow-xl flex flex-col items-center border border-slate-100 animate-in fade-in duration-500">
+          <img src="/aurys-icon.png" alt="Aurys" className="h-16 w-16 mb-4 animate-pulse opacity-50" />
+          <div className="flex items-center gap-2 text-slate-400 font-medium">
+            <span>Preparando sua experiência...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-4">

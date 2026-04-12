@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { filterCategoriesForDocumentType, filterContactsForDocumentType } from '@/domain/finance/helpers';
 import { DocumentType } from '@/types/financial';
 import { Button } from '@/components/ui/button';
@@ -68,12 +68,29 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
   const [contactSearch, setContactSearch] = useState('');
   const [showCreateContact, setShowCreateContact] = useState(false);
 
+  const lastInitRef = useRef<string | null | undefined>(undefined); // undefined = never, null = 'new'
+  const isOpeningRef = useRef(false);
+
+  useEffect(() => {
+    if (!open) {
+      lastInitRef.current = undefined;
+      isOpeningRef.current = false;
+    } else {
+      isOpeningRef.current = true;
+    }
+  }, [open]);
+
   useEffect(() => {
     if (open) {
-      if (editDocumentId && snapshot) {
+      const currentId = editDocumentId || 'new';
+      
+      // Se já inicializamos para este ID, não inicializamos de novo (evita reset no snapshot update)
+      if (lastInitRef.current === currentId) return;
+
+      if (editDocumentId) {
+        if (!snapshot) return; // Aguarda o snapshot para carregar os dados do doc
         const doc = snapshot.documents.find(d => d.id === editDocumentId);
         if (doc) {
-          // Map backend type to FlowType
           setFlowType((doc.type === 'venda' || doc.type === 'receita') ? 'entrada' : 'saida');
           setContactId(doc.contactId);
           setCategoryId(doc.categoryId);
@@ -87,8 +104,10 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
           const docTitles = snapshot.titles.filter(t => t.documentId === editDocumentId);
           if (docTitles.length > 0) setDueDate(docTitles[0].dueDate);
           setIsLocked(docTitles.some(t => t.status === 'pago' || t.status === 'recebido'));
+          lastInitRef.current = currentId;
         }
       } else {
+        // Novo documento: inicializa valores padrão apenas uma vez
         setFlowType(defaultSide === 'pagar' ? 'saida' : 'entrada');
         setContactId('');
         setCategoryId('');
@@ -108,6 +127,7 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
         setAutoAdjustRemainder(true);
         setIsLocked(false);
         setSaveStep('idle');
+        lastInitRef.current = currentId;
       }
     }
   }, [open, editDocumentId, snapshot, defaultSide]);
@@ -201,10 +221,15 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
     const name = contactSearch.trim();
     if (!name) return;
     try {
-      const result = await createContact({ name, type: isReceita ? 'cliente' : 'fornecedor' });
+      const result = await createContact({ 
+        name, 
+        type: isReceita ? 'cliente' : 'fornecedor' 
+      });
+      // Importante: setContactId dispara antes do fechamento do modal interno
       setContactId(result.id);
       setShowCreateContact(false);
       setContactSearch('');
+      // Não limpamos o restante do form, o componente mantém o estado
     } catch (e) {
       toast({ title: 'Erro', description: 'Erro ao criar contato.', variant: 'destructive' });
     }
@@ -328,8 +353,23 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
                 value={flowType} 
                 disabled={isLocked}
                 onValueChange={v => {
-                  setFlowType(v as FlowType);
-                  setContactId('');
+                  const newFlowType = v as FlowType;
+                  setFlowType(newFlowType);
+                  
+                  // Regra simples: se o contato for "ambos", mantém. Se não for compatível, limpa.
+                  if (contactId && snapshot) {
+                    const currentContact = snapshot.contacts.find(c => c.id === contactId);
+                    if (currentContact && currentContact.type !== 'ambos') {
+                      const isNewReceita = newFlowType === 'entrada';
+                      const isCompatible = isNewReceita ? currentContact.type === 'cliente' : currentContact.type === 'fornecedor';
+                      if (!isCompatible) {
+                        setContactId('');
+                      }
+                    }
+                  } else {
+                    setContactId('');
+                  }
+                  
                   setCategoryId('');
                 }} 
                 className="flex flex-col sm:flex-row gap-6"
@@ -367,7 +407,7 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
                           <span className="text-muted-foreground block mb-2">Nenhum contato encontrado.</span>
                           {contactSearch.trim() && (
                             <Button variant="ghost" size="sm" className="w-full justify-start text-primary" onClick={() => handleOpenCreateContact(contactSearch)}>
-                              <Plus className="mr-2 h-4 w-4" /> Criar "{contactSearch}"
+                              <Plus className="mr-2 h-4 w-4" /> Criar {isReceita ? 'cliente' : 'fornecedor'}: "{contactSearch}"
                             </Button>
                           )}
                         </CommandEmpty>
@@ -379,7 +419,7 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
                           ))}
                           {!exactContactMatch && contactSearch.trim() !== '' && (
                             <CommandItem value={contactSearch} onSelect={() => handleOpenCreateContact(contactSearch)} className="text-primary font-medium mt-1">
-                              <Plus className="mr-2 h-4 w-4" /> Criar "{contactSearch}"
+                              <Plus className="mr-2 h-4 w-4" /> Criar {isReceita ? 'cliente' : 'fornecedor'}: "{contactSearch}"
                             </CommandItem>
                           )}
                         </CommandGroup>
