@@ -21,9 +21,10 @@ import { useToast } from '@/components/ui/use-toast';
 
 type FlowType = 'entrada' | 'saida';
 
-export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocumentId }: {
+export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, editDocumentId }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
   defaultSide?: 'pagar' | 'receber';
   editDocumentId?: string | null;
 }) {
@@ -253,6 +254,7 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
         await updateDocument({ documentId: editDocumentId, payload });
         toast({ title: 'Lançamento atualizado com sucesso!' });
         onOpenChange(false);
+        onSuccess?.();
       } else {
         const result = await createDocument({ payload, payNow: false });
         
@@ -267,6 +269,7 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
              });
              toast({ title: 'Lançamento e baixa registrados com sucesso!' });
              onOpenChange(false);
+             onSuccess?.();
            } catch (e) {
              toast({ 
                title: 'Atenção', 
@@ -274,10 +277,12 @@ export function NewDocumentSheet({ open, onOpenChange, defaultSide, editDocument
                variant: 'destructive' 
              });
              onOpenChange(false);
+             onSuccess?.();
            }
         } else {
            toast({ title: 'Lançamento criado com sucesso!' });
            onOpenChange(false);
+           onSuccess?.();
         }
       }
     } catch (e) {

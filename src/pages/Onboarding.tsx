@@ -59,7 +59,7 @@ export default function Onboarding() {
     } catch (e) {
       console.error('Erro ao persistir onboarding:', e);
     }
-    navigate('/lancar', { state: { from: 'onboarding' }, replace: true });
+    navigate('/lancar?onboarding=true', { state: { from: 'onboarding' }, replace: true });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
