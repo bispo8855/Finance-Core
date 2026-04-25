@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, PlusCircle, ArrowDownToLine, ArrowUpFromLine,
-  Activity, BarChart3, Tags, Building2, Users, Settings, LogOut, Clock3, Tag, Zap
+  Activity, BarChart3, Tags, Building2, Users, Settings, LogOut, Clock3, Tag, Zap, FileSpreadsheet
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AppBrand } from '@/components/shared/AppBrand';
@@ -15,6 +15,7 @@ import {
 
 const movementNav = [
   { title: 'Lançar', url: '/lancar', icon: PlusCircle },
+  { title: 'Importar', url: '/importar', icon: FileSpreadsheet },
   { title: 'Contas a Receber', url: '/receber', icon: ArrowDownToLine },
   { title: 'Contas a Pagar', url: '/pagar', icon: ArrowUpFromLine },
   { title: 'Fluxo de Caixa', url: '/fluxo', icon: Activity },

@@ -100,7 +100,8 @@ export default function Accounts() {
         await updateAccount({ id: editingId, payload });
       }
       setOpen(false);
-    } catch (e: any) {
+    } catch (error) {
+      const e = error as Error;
       console.error("Erro ao salvar conta:", e);
       alert(`Erro ao salvar: ${e.message || 'Verifique se as colunas (institution, is_active) existem no Supabase.'}`);
     }

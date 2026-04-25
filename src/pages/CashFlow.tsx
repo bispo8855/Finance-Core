@@ -8,6 +8,7 @@ import { useCashflow } from '@/hooks/finance/useCashflow';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { DescriptionWithRef } from '@/components/shared/DescriptionWithRef';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 const periods = [
@@ -17,6 +18,7 @@ const periods = [
   { label: '90 dias', days: 90 },
 ];
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
@@ -231,6 +233,7 @@ export default function CashFlow() {
                   dataKey="saldo" 
                   stroke="hsl(var(--primary))" 
                   strokeWidth={2}
+                  // eslint-disable-next-line @typescript-eslint/no-explicit-any
                   dot={(props: any) => {
                     if (props.payload.saldo < 0) {
                       return (
@@ -422,7 +425,7 @@ export default function CashFlow() {
                                                           <li key={item.id} className="flex justify-between items-center text-sm py-1">
                                                             <div className="flex items-center gap-2">
                                                               <span className="w-1.5 h-1.5 rounded-full bg-positive flex-shrink-0" />
-                                                              <span className="text-foreground">{item.description}</span>
+                                                              <DescriptionWithRef description={item.description} className="text-sm" />
                                                               <span className={cn(
                                                                 "text-[10px] px-1.5 py-0.5 rounded uppercase font-medium",
                                                                 item.origin === 'movement' ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"
@@ -448,7 +451,7 @@ export default function CashFlow() {
                                                           <li key={item.id} className="flex justify-between items-center text-sm py-1">
                                                             <div className="flex items-center gap-2">
                                                               <span className="w-1.5 h-1.5 rounded-full bg-negative flex-shrink-0" />
-                                                              <span className="text-foreground">{item.description}</span>
+                                                              <DescriptionWithRef description={item.description} className="text-sm" />
                                                               <span className={cn(
                                                                 "text-[10px] px-1.5 py-0.5 rounded uppercase font-medium",
                                                                 item.origin === 'movement' ? "bg-accent text-accent-foreground" : "bg-muted text-muted-foreground"

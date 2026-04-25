@@ -35,10 +35,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Timer de segurança para evitar que o app fique travado em loading infinito
     const safetyTimer = setTimeout(() => {
-      if (isLoading) {
-        console.warn('AuthContext: Tempo limite de busca de sessão atingido. Forçando encerramento do loading.');
-        setIsLoading(false);
-      }
+      console.warn('AuthContext: Tempo limite de busca de sessão atingido. Forçando encerramento do loading.');
+      setIsLoading(false);
     }, 5000); // 5 segundos é mais que suficiente para um getSession
 
     // Busca a sessão atual no load inicial
@@ -100,4 +98,5 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

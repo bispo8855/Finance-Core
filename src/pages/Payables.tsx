@@ -8,6 +8,7 @@ import { TitleDetailsSheet } from '@/components/finance/TitleDetailsSheet';
 import { KPICard } from '@/components/shared/KPICard';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { DescriptionWithRef } from '@/components/shared/DescriptionWithRef';
 import { PeriodFilter } from '@/components/finance/PeriodFilter';
 import { PeriodOption, isDateInPeriod } from '@/lib/dateUtils';
 import { Button } from '@/components/ui/button';
@@ -283,8 +284,8 @@ export default function Payables() {
                   <tr className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3">{new Date(t.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-4 py-3">{getContactName(t.contactId || snapshot?.documents.find(d => d.id === t.documentId)?.contactId || '')}</td>
-                  <td className="px-4 py-3 max-w-[200px] truncate" title={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description}>
-                    {t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description || '—'}
+                  <td className="px-4 py-3 max-w-[250px]" title={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description}>
+                    <DescriptionWithRef description={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description} />
                   </td>
                   <td className="px-4 py-3">{t.installment}/{t.totalInstallments}</td>
                   <td className="px-4 py-3 text-right">

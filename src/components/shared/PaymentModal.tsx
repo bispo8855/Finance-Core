@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -53,9 +53,14 @@ export function PaymentModal({ title, open, onClose }: PaymentModalProps) {
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="sm:max-w-md" onOpenAutoFocus={handleOpen}>
+      <DialogContent 
+        className="sm:max-w-md" 
+        onOpenAutoFocus={handleOpen}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Baixar Título</DialogTitle>
+          <DialogDescription className="hidden">Preencha os dados para registrar o pagamento.</DialogDescription>
         </DialogHeader>
         {title && (
           <div className="space-y-4">

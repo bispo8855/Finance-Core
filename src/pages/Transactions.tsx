@@ -12,6 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { DescriptionWithRef } from '@/components/shared/DescriptionWithRef';
 import { useDeleteDocument } from '@/hooks/finance/useDeleteDocument';
 import { useToast } from '@/components/ui/use-toast';
 import { NewDocumentSheet } from '@/components/finance/NewDocumentSheet';
@@ -273,7 +274,9 @@ export default function Transactions() {
                   </td>
                   <td className="px-4 py-3">{getContactName(d.contactId)}</td>
                   <td className="px-4 py-3">{getCategoryName(d.categoryId)}</td>
-                  <td className="px-4 py-3 max-w-[200px] truncate">{d.description || '—'}</td>
+                  <td className="px-4 py-3 max-w-[300px]">
+                    <DescriptionWithRef description={d.description} />
+                  </td>
                   <td className="px-4 py-3 text-right">
                     <div className="font-medium">{fmt(d.totalValue)}</div>
                     {(() => {

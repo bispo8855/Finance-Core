@@ -18,6 +18,7 @@ import { useUpdateDocument } from '@/hooks/finance/useUpdateDocument';
 import { useSettleTitle } from '@/hooks/finance/useSettleTitle';
 import { useCreateContact } from '@/hooks/finance/useCatalogs';
 import { useToast } from '@/components/ui/use-toast';
+import { cn } from '@/lib/utils';
 
 type FlowType = 'entrada' | 'saida';
 
@@ -104,6 +105,18 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
           const docTitles = snapshot.titles.filter(t => t.documentId === editDocumentId);
           if (docTitles.length > 0) setDueDate(docTitles[0].dueDate);
           setIsLocked(docTitles.some(t => t.status === 'pago' || t.status === 'recebido'));
+          
+          // Ajuste 5: Automate isMarketplace if marketplace fields exist
+          const hasMktFields = (doc.grossAmount !== undefined && doc.grossAmount !== null) || 
+                               (doc.marketplaceFee !== undefined && doc.marketplaceFee !== null) ||
+                               (doc.shippingCost !== undefined && doc.shippingCost !== null);
+          setIsMarketplace(hasMktFields);
+          if (hasMktFields) {
+            setGrossAmount(doc.grossAmount?.toString() || '');
+            setMarketplaceFee(doc.marketplaceFee?.toString() || '');
+            setShippingCost(doc.shippingCost?.toString() || '');
+          }
+
           lastInitRef.current = currentId;
         }
       } else {
@@ -139,13 +152,18 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
   }, [competenceDate, hasManuallySetDueDate, editDocumentId]);
 
   useEffect(() => {
+    const gross = parseFloat(grossAmount) || 0;
+    const fee = parseFloat(marketplaceFee) || 0;
+    const shipping = parseFloat(shippingCost) || 0;
+    const net = Math.round((gross - fee - shipping) * 100) / 100;
+    
+    // Auto-enable marketplace if any specific field has value
+    if (!isOpeningRef.current && (gross > 0 || fee > 0 || shipping > 0)) {
+       setIsMarketplace(true);
+    }
+
     if (isMarketplace) {
-      const gross = parseFloat(grossAmount) || 0;
-      const fee = parseFloat(marketplaceFee) || 0;
-      const shipping = parseFloat(shippingCost) || 0;
-      // Precision handle
-      const net = Math.round((gross - fee - shipping) * 100) / 100;
-      if (!isNaN(net)) setTotalValue(net.toString());
+       if (!isNaN(net)) setTotalValue(net.toString());
     }
   }, [isMarketplace, grossAmount, marketplaceFee, shippingCost]);
 
@@ -446,9 +464,17 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">3. Valor + vencimento</h3>
               {isReceita && (
-                <div className="flex items-center gap-2 bg-primary/10 px-3 py-1.5 rounded-full border border-primary/20">
-                  <Switch id="mkt-mode" checked={isMarketplace} onCheckedChange={setIsMarketplace} />
-                  <Label htmlFor="mkt-mode" className="text-xs font-bold text-primary cursor-pointer uppercase tracking-tight">Modo Marketplace</Label>
+                <div className={cn(
+                  "flex items-center gap-3 px-3 py-1.5 rounded-full border transition-colors",
+                  isMarketplace ? "bg-primary/10 border-primary/20" : "bg-muted/50 border-transparent text-muted-foreground"
+                )}>
+                  <Switch id="mkt-mode" checked={isMarketplace} onCheckedChange={setIsMarketplace} disabled={isLocked} />
+                  <Label htmlFor="mkt-mode" className={cn(
+                    "text-xs font-bold cursor-pointer uppercase tracking-tight",
+                    isMarketplace ? "text-primary" : "text-muted-foreground"
+                  )}>
+                    Marketplace
+                  </Label>
                 </div>
               )}
             </div>
@@ -457,26 +483,31 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
               {isMarketplace ? (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in slide-in-from-top-2">
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground">Valor Bruto (MKT)</Label>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">Valor Bruto (MKT)</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
-                      <Input className="bg-background h-10 pl-8 font-medium" type="number" step="0.01" value={grossAmount} onChange={e => setGrossAmount(e.target.value)} />
+                      <Input className="bg-background h-10 pl-8 font-medium" type="number" step="0.01" value={grossAmount} onChange={e => setGrossAmount(e.target.value)} disabled={isLocked} />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground">Comissão / Taxas</Label>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">Comissão / Taxas</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
-                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={marketplaceFee} onChange={e => setMarketplaceFee(e.target.value)} />
+                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={marketplaceFee} onChange={e => setMarketplaceFee(e.target.value)} disabled={isLocked} />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="text-xs uppercase text-muted-foreground">Frete / Logística</Label>
+                    <Label className="text-[10px] font-bold uppercase text-muted-foreground/70">Frete / Logística</Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium text-xs">R$</span>
-                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={shippingCost} onChange={e => setShippingCost(e.target.value)} />
+                      <Input className="bg-background h-10 pl-8 font-medium text-negative" type="number" step="0.01" value={shippingCost} onChange={e => setShippingCost(e.target.value)} disabled={isLocked} />
                     </div>
                   </div>
+                  {isLocked && (
+                    <div className="md:col-span-3 text-[10px] text-muted-foreground bg-slate-100 p-2 rounded border border-slate-200">
+                      Este lançamento possui marketplace_import e movimentações registradas; os campos de rateio estão bloqueados.
+                    </div>
+                  )}
                 </div>
               ) : null}
 
@@ -604,9 +635,15 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
                   </div>
 
                   {parseFloat(totalValue) > 0 && (
-                    <div className="bg-muted/30 rounded-lg border p-5 space-y-4">
+                    <div className={cn(
+                      "bg-muted/30 rounded-lg border p-5 space-y-4",
+                      isLocked && "opacity-75"
+                    )}>
                       <div className="flex items-center justify-between">
-                        <p className="text-sm font-semibold text-foreground">Distribuição das Parcelas</p>
+                        <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          Distribuição das Parcelas
+                          {isLocked && <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded uppercase">Somente leitura</span>}
+                        </p>
                         <div className="flex items-center gap-4">
                           <div className="flex items-center gap-2">
                             <Switch id="auto-adjust" disabled={isLocked} checked={autoAdjustRemainder} onCheckedChange={setAutoAdjustRemainder} />

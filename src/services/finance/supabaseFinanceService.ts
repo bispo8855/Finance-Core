@@ -100,7 +100,10 @@ export class SupabaseFinanceService implements IFinanceService {
       .select()
       .single();
 
-    if (docError) throw docError;
+    if (docError) {
+      console.error('Supabase Doc Error:', docError);
+      throw new Error(`Erro DB (Documentos): ${docError.message || JSON.stringify(docError)}`);
+    }
 
     // 2. Preparar e Inserir Titles
     const titleType: 'receber' | 'pagar' = (payload.type === 'venda' || payload.type === 'receita') ? 'receber' : 'pagar';
@@ -152,7 +155,10 @@ export class SupabaseFinanceService implements IFinanceService {
       .insert(titlesToInsert)
       .select();
 
-    if (titlesError) throw titlesError;
+    if (titlesError) {
+      console.error('Supabase Titles Error:', titlesError);
+      throw new Error(`Erro DB (Títulos): ${titlesError.message || JSON.stringify(titlesError)}`);
+    }
 
     // 3. Movement (if payNow)
     const newMovements = [];

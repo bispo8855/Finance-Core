@@ -55,7 +55,9 @@ export default function Onboarding() {
     localStorage.setItem('hasDismissedOnboarding', 'true');
     try {
       await financeService.updateProfile({ onboardingCompleted: true }); // Skipping counts as completed for redirect purposes
-    } catch (e) {}
+    } catch (e) {
+      console.error('Erro ao pular onboarding:', e);
+    }
     navigate('/', { replace: true });
   };
 
