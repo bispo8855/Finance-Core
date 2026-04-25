@@ -64,7 +64,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        const dueDate = dDate.toISOString().split('T')[0];
 
        // Regra de Ouro: Tipos "Liquidados" nascem pagos e sem data futura
-       const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao'].includes(event.primaryType);
+       const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType);
        const payNow = event.historical || isLiquidation;
        const finalDueDate = payNow ? competence : dueDate;
 
@@ -81,19 +81,24 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        
        const description = `${refPart}${cleanTitle}${unmatchedFlag}`.trim();
 
+       // Evitar falsas vendas no modo bank, registrando apenas como receita para entradas líquidas
+       const docType = (event.primaryType === 'entrada_liquidada' && !isDespesa) ? 'receita' : (isDespesa ? 'despesa' : 'venda');
+
        const payload: CreateDocumentPayload = {
-         type: isDespesa ? 'despesa' : 'venda',
+         type: docType,
          contactId: contact.id,
          categoryId: event.categoryId || category.id,
          competenceDate: competence,
          firstDueDate: finalDueDate,
          totalValue: Math.abs(event.netAmount),
-         grossAmount: Math.abs(event.grossAmount),
-         marketplaceFee: Math.abs(event.feeAmount),
+         // Garante que o valor bruto seja o próprio netAmount para entradas líquidas, anulando possíveis taxas mal interpretadas
+         grossAmount: event.primaryType === 'entrada_liquidada' ? Math.abs(event.netAmount) : Math.abs(event.grossAmount),
+         marketplaceFee: event.primaryType === 'entrada_liquidada' ? 0 : Math.abs(event.feeAmount),
          shippingCost: Math.abs(event.freightAmount),
          description,
          condition: 'avista',
-         installments: 1
+         installments: 1,
+         referenceId: event.reference
        };
 
        // Se payNow estiver ativo, criar documento já baixado na conta padrão

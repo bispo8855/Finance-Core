@@ -35,6 +35,13 @@ export default function ImportPage() {
       
       const newBatch = await processImportFile(buffer, file.name, file.name.endsWith('.csv') ? 'csv' : 'xlsx', source, mode);
       
+      const hasAnyValidReference = newBatch.events.some(e => e.reference && e.reference.length > 0);
+      if (!hasAnyValidReference && newBatch.events.length > 1) {
+        toast.warning('Aviso sobre Agrupamento', {
+          description: 'Não foi possível identificar um ID de pedido confiável. As vendas serão importadas individualmente.'
+        });
+      }
+      
       // 5. Motor de Conciliação e Duplicidade
       try {
         const snapshot = await supabaseFinanceService.getSnapshot();
@@ -52,9 +59,22 @@ export default function ImportPage() {
           // B. Verificação de Conciliação Inteligente
           // Prioridade 1: Match por Referência (ORDER_ID)
           let matchFound = false;
-          if (event.reference && (mode === 'bank' || (mode === 'sales' && ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao'].includes(event.primaryType)))) {
-            const idPattern = `[#${event.reference}]`;
-            const refCandidates = pendingTitles.filter(t => (t.description || '').includes(idPattern));
+          if (event.reference && (mode === 'bank' || (mode === 'sales' && ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType)))) {
+            const refCandidates = pendingTitles.filter(t => {
+              const doc = snapshot.documents.find(d => d.id === t.documentId);
+              if (!doc) return false;
+              
+              const ref = event.reference!;
+              // 1. Busca por reference_id estruturado (nova implementação)
+              if (doc.referenceId && doc.referenceId === ref) return true;
+              
+              // 2. Busca pelo padrão formatado do ImportPersister [#ID]
+              const docDesc = doc.description || '';
+              if (docDesc.includes(`[#${ref}]`)) return true;
+              
+              // 3. Busca por fallback de descrição antiga: "2000012293036909\nProduto"
+              return ref.length > 5 && docDesc.includes(ref);
+            });
             
             if (refCandidates.length === 1) {
               event.reconciliationId = refCandidates[0].id;
@@ -87,16 +107,67 @@ export default function ImportPage() {
                 return sameValue && diffDays <= dayMargin;
               });
 
+              // Prepara candidatos amplos (±15% do valor e ±7 dias) para sugestão na tela
+              event.reconciliationCandidates = pendingTitles.filter(t => {
+                const tDate = new Date(t.dueDate);
+                const diffDays = Math.abs(tDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+                if (diffDays > 7) return false;
+                const diffPct = Math.abs(t.value - eventValue) / t.value;
+                return diffPct <= 0.15 || Math.abs(t.value - eventValue) < 0.01;
+              }).map(t => ({
+                id: t.id,
+                description: t.description || snapshot.documents.find(d => d.id === t.documentId)?.description || 'Título',
+                value: t.value,
+                date: t.dueDate
+              }));
+
               if (valCandidates.length === 1) {
                 event.reconciliationId = valCandidates[0].id;
                 event.reconciliationType = 'match';
-                if (mode === 'bank') event.confidence = 'alta';
+                if (mode === 'bank' || event.primaryType === 'entrada_liquidada') {
+                  event.confidence = 'media';
+                  event.explanation = (event.explanation || '') + ' | ℹ️ Correspondência sugerida por Valor + Data próxima. Confirme a conciliação.';
+                }
               } else if (valCandidates.length > 1) {
                 event.reconciliationType = 'multiple';
                 event.confidence = 'revisar';
               } else {
                 event.reconciliationType = 'none';
-                if (mode === 'bank') event.explanation = (event.explanation || '') + ' | Criado como Entrada Avulsa (sem título correspondente).';
+                if (mode === 'bank' || event.primaryType === 'entrada_liquidada') {
+                  if (event.primaryType === 'entrada_liquidada') {
+                    if (event.reference) {
+                       event.confidence = 'revisar';
+                       event.explanation = (event.explanation || '') + ' | ⚠️ Referência encontrada, mas nenhuma venda correspondente foi localizada. Alta prioridade.';
+                    } else {
+                       const closeCandidates = event.reconciliationCandidates.filter(c => {
+                          const diffPct = Math.abs(c.value - eventValue) / Math.max(c.value, 1);
+                          return diffPct <= 0.05 && diffPct > 0.001;
+                       });
+                       const recurrentCount = newBatch.events.filter(e => Math.abs(Math.abs(e.netAmount) - eventValue) < 0.01).length;
+
+                       if (closeCandidates.length > 0) {
+                          event.reconciliationType = 'divergence';
+                          event.confidence = 'revisar';
+                          event.explanation = (event.explanation || '') + ' | ⚠️ Possível divergência de valor.';
+                       } else if (recurrentCount > 1) {
+                          event.confidence = 'alta';
+                          event.status = 'aprovado';
+                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (Recorrente). Auto-aprovado.';
+                       } else if (eventValue < 100) {
+                          event.confidence = 'alta';
+                          event.status = 'aprovado';
+                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (< 100). Auto-aprovado.';
+                       } else {
+                          // Valor >= 100
+                          event.confidence = 'revisar';
+                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (Isolada >= 100). Requer revisão.';
+                       }
+                    }
+                  } else {
+                    event.confidence = 'revisar';
+                    event.explanation = (event.explanation || '') + ' | ⚠️ Sem venda correspondente encontrada. Revise antes de importar.';
+                  }
+                }
               }
             }
           }

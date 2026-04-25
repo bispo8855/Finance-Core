@@ -9,8 +9,7 @@ import { KPICard } from '@/components/shared/KPICard';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { DescriptionWithRef } from '@/components/shared/DescriptionWithRef';
-import { PeriodFilter } from '@/components/finance/PeriodFilter';
-import { PeriodOption, isDateInPeriod } from '@/lib/dateUtils';
+import { MonthYearPicker } from '@/components/shared/MonthYearPicker';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Title, TitleStatus } from '@/types/financial';
@@ -36,7 +35,7 @@ export default function Receivables() {
   
   const [tab, setTab] = useState(initialTab);
   const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState<PeriodOption>('current_month');
+  const [currentMonthYear, setCurrentMonthYear] = useState<Date>(new Date());
   const [payTitle, setPayTitle] = useState<Title | null>(null);
   
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -62,7 +61,11 @@ export default function Receivables() {
     recebimentos.forEach(t => {
       const isSettled = t.status === 'pago' || t.status === 'recebido';
       const referenceDate = (isSettled && t.settledAt) ? t.settledAt : t.dueDate;
-      const tInPeriod = isDateInPeriod(referenceDate, period);
+      
+      const tMonth = Number(referenceDate.substring(5, 7)) - 1;
+      const tYear = Number(referenceDate.substring(0, 4));
+      const tInPeriod = tMonth === currentMonthYear.getMonth() && tYear === currentMonthYear.getFullYear();
+      
       const isOverdue = !isSettled && t.dueDate < todayStr;
 
       let keepInPeriod = tInPeriod;
@@ -107,7 +110,7 @@ export default function Receivables() {
     outOfPeriod.sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
     return [[...outOfPeriod, ...inPeriod], outOfPeriod.length] as [Title[], number];
-  }, [recebimentos, snapshot, tab, search, period, todayStr]);
+  }, [recebimentos, snapshot, tab, search, currentMonthYear, todayStr]);
 
   const summaryMetrics = useMemo(() => {
     let totalReceber = 0;
@@ -241,7 +244,7 @@ export default function Receivables() {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <PeriodFilter value={period} onChange={setPeriod} className="h-9 w-[160px] text-xs font-medium bg-background border-muted" />
+            <MonthYearPicker date={currentMonthYear} onChange={setCurrentMonthYear} />
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input 
@@ -260,6 +263,7 @@ export default function Receivables() {
               <tr className="border-b bg-muted/50">
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Vencimento</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Cliente</th>
+                <th className="text-left px-4 py-3 font-medium text-muted-foreground">Categoria</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Descrição</th>
                 <th className="text-left px-4 py-3 font-medium text-muted-foreground">Parcela</th>
                 <th className="text-right px-4 py-3 font-medium text-muted-foreground">Valor</th>
@@ -273,14 +277,19 @@ export default function Receivables() {
               {filtered.map((t, index) => (
                 <Fragment key={t.id}>
                   {index === 0 && outOfPeriodCount > 0 && (
-                    <tr className="bg-destructive/10"><td colSpan={9} className="px-4 py-2 text-xs font-semibold text-destructive uppercase tracking-wide">Títulos Atrasados (Anteriores ao período)</td></tr>
+                    <tr className="bg-destructive/10"><td colSpan={10} className="px-4 py-2 text-xs font-semibold text-destructive uppercase tracking-wide">Títulos Atrasados (Anteriores ao período)</td></tr>
                   )}
-                  {index === outOfPeriodCount && filtered.length > outOfPeriodCount && outOfPeriodCount > 0 && period !== 'all' && (
-                    <tr className="bg-muted/50"><td colSpan={9} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">No período selecionado</td></tr>
+                  {index === outOfPeriodCount && filtered.length > outOfPeriodCount && outOfPeriodCount > 0 && (
+                    <tr className="bg-muted/50"><td colSpan={10} className="px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">No período selecionado</td></tr>
                   )}
                   <tr className="hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3">{new Date(t.dueDate + 'T12:00:00').toLocaleDateString('pt-BR')}</td>
                   <td className="px-4 py-3">{getContactName(t.contactId || snapshot?.documents.find(d => d.id === t.documentId)?.contactId || '')}</td>
+                  <td className="px-4 py-3">
+                    <span className="inline-flex items-center rounded-md bg-muted px-2 py-1 text-[10px] font-medium text-muted-foreground ring-1 ring-inset ring-muted-foreground/20">
+                      {snapshot?.categories.find(c => c.id === snapshot?.documents.find(d => d.id === t.documentId)?.categoryId)?.name || 'Sem Categoria'}
+                    </span>
+                  </td>
                   <td className="px-4 py-3 max-w-[250px]" title={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description}>
                     <DescriptionWithRef description={t.description || snapshot?.documents.find(d => d.id === t.documentId)?.description} />
                   </td>
@@ -363,12 +372,12 @@ export default function Receivables() {
                 </Fragment>
               ))}
               {filtered.length === 0 && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">Nenhum título encontrado.</td></tr>
+                <tr><td colSpan={10} className="px-4 py-8 text-center text-muted-foreground">Nenhum título encontrado.</td></tr>
               )}
             </tbody>
             <tfoot className="border-t bg-muted/20 font-semibold group">
               <tr>
-                <td colSpan={4} className="px-4 py-4 text-right text-muted-foreground">
+                <td colSpan={5} className="px-4 py-4 text-right text-muted-foreground">
                   Total do Filtro ({summaryMetrics.count} título{summaryMetrics.count !== 1 ? 's' : ''}):
                 </td>
                 <td className="px-4 py-4 text-right text-foreground">

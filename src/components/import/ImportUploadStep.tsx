@@ -116,6 +116,7 @@ export default function ImportUploadStep({ onUpload }: ImportUploadStepProps) {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Mercado Livre">Mercado Livre</SelectItem>
+                <SelectItem value="Mercado Pago">Mercado Pago</SelectItem>
                 <SelectItem value="Shopee">Shopee</SelectItem>
                 <SelectItem value="Shopify">Shopify</SelectItem>
                 <SelectItem value="Gateway">Gateway de Pagamento</SelectItem>

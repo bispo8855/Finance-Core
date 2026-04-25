@@ -13,7 +13,17 @@ function normalizeReference(val: unknown): string {
   if (val === null || val === undefined || val === '') return '';
   
   const str = String(val).trim();
+  const lowerStr = str.toLowerCase();
   
+  // Lista de bloqueios de palavras genéricas
+  const blockedWords = ['sim', 'não', 'nao', 'ok', '-', 'n/a', 'null', 'undefined', 'nenhum'];
+  if (blockedWords.includes(lowerStr)) return '';
+  
+  // Validação: Ter pelo menos algum número e ter tamanho mínimo, ou ser um hash longo
+  const hasNumbers = /\d/.test(str);
+  if (!hasNumbers && str.length < 6) return ''; // Se não tem número, e é curto, ignora (ex: nomes curtos)
+  if (str.length < 3) return ''; // Muito curto para ser referência
+
   // Se parece notação científica ou é um número grande
   if (str.toUpperCase().includes('E+') || (typeof val === 'number' && val > 9999999999)) {
     const num = Number(val);
@@ -77,31 +87,54 @@ export async function processImportFile(
   const dataRows = rawRows.slice(headerRowIndex + 1).filter(row => row && row.length > 0 && row.some(cell => cell !== ''));
 
   // 3. Identificar Colunas Críticas
-  const findBestCol = (hints: string[]) => {
+  const findBestCol = (hints: string[], blocked: string[] = ['pacote de diversos', 'pertence a um kit', 'status']) => {
     for (const hint of hints) {
-      const idx = headers.findIndex(h => h && (h === hint || h.includes(hint)));
+      const idx = headers.findIndex(h => {
+        if (!h) return false;
+        if (blocked.some(b => h.includes(b))) return false;
+        return h === hint || h.includes(hint);
+      });
       if (idx !== -1) return idx;
     }
     return -1;
   };
 
-  const colDate = findBestCol(['data da venda', 'data de', 'data', 'date', 'criacao', 'horario', 'release_date']);
-  
-  // Separar colunas por Natureza (Líquida vs Bruta)
-  const NET_HINTS = ['valor liquido', 'net', 'total', 'payout', 'valor da operacao', 'liquido', 'recebido', 'transaction_net_amount', 'net_credit_amount', 'net_debit_amount', 'credito', 'debito'];
-  const GROSS_HINTS = ['valor bruto', 'gross', 'receita por produto', 'bruto', 'preco', 'subtotal', 'valor da venda', 'amount', 'gross_amount'];
+  let colDate = -1, colNet = -1, colGross = -1, colDesc = -1, colRef = -1, colProduct = -1;
 
-  const colNet = findBestCol(NET_HINTS);
-  const colGross = findBestCol(GROSS_HINTS);
+  if (source === 'Mercado Livre' && mode === 'sales') {
+    // Mapeamento explícito exigido para Mercado Livre (Sales)
+    const exactMatch = (name: string) => headers.findIndex(h => h === normalizeStr(name) || h.includes(normalizeStr(name)));
+    
+    colRef = exactMatch('n.º de venda');
+    if (colRef === -1) colRef = exactMatch('numero de venda');
+    
+    colDate = exactMatch('data da venda');
+    colNet = exactMatch('total (brl)'); 
+    if (colNet === -1) colNet = exactMatch('total');
+    
+    colProduct = exactMatch('título do anuncio') !== -1 ? exactMatch('título do anuncio') : exactMatch('produto');
+    // Para ml sales, forçamos o colDesc a ser o mesmo do produto. 
+    // Se não houver, o fallback cuidará de usar "Venda Mercado Livre #REF".
+    colDesc = colProduct;
+  } else {
+    colDate = findBestCol(['data da venda', 'data de liberacao', 'data de', 'data', 'date', 'criacao', 'horario', 'release_date']);
+    
+    const NET_HINTS = ['valor liquido creditado', 'valor liquido', 'net', 'total', 'payout', 'valor da operacao', 'liquido', 'recebido', 'transaction_net_amount', 'net_credit_amount', 'net_debit_amount', 'credito', 'debito'];
+    const GROSS_HINTS = ['valor bruto', 'gross', 'receita por produto', 'bruto', 'preco', 'subtotal', 'valor da venda', 'amount', 'gross_amount'];
+
+    colNet = findBestCol(NET_HINTS);
+    colGross = findBestCol(GROSS_HINTS);
+
+    colProduct = findBestCol(['produto', 'titulo do anuncio', 'nome do produto', 'item']);
+    colDesc = findBestCol(['descricao', 'descrição', 'description', 'tipo', 'transaction_type', 'titulo do anuncio', 'descricao da operacao', 'type', 'produto', 'titulo', 'nome', 'detalhe', 'operacao', 'descri']);
+    colRef = findBestCol(['n.º do pacote', 'id do pacote', 'pacote', 'reference_id', 'n.º de venda', 'numero de venda', 'id do pedido', 'pedido', 'order', 'transacao', 'referencia', 'external_id', 'codigo', 'order_id']);
+    if (colRef === -1) colRef = headers.findIndex(h => h === 'id');
+  }
 
   // Prioridade: Líquido > Bruto
   const isNetColumn = colNet !== -1;
   const colVal = isNetColumn ? colNet : (colGross !== -1 ? colGross : -1);
   const valueSource = isNetColumn ? 'net_column' : (colGross !== -1 ? 'calculated' : 'single_amount');
-
-  const colDesc = findBestCol(['titulo do anuncio', 'descricao da operacao', 'transaction_type', 'type', 'tipo', 'produto', 'titulo', 'nome', 'detalhe', 'operacao', 'descri', 'description']);
-  let colRef = findBestCol(['reference_id', 'n.º de venda', 'numero de venda', 'id', 'pedido', 'order', 'transacao', 'referencia', 'external_id', 'codigo', 'order_id']);
-  if (colRef === -1) colRef = headers.findIndex(h => h === 'id');
 
   if (colVal === -1) throw new Error("Não foi possível identificar a coluna de valor.");
 
@@ -116,10 +149,47 @@ export async function processImportFile(
     const amount = parseNum(row[colVal]);
     if (isNaN(amount) || amount === 0) continue;
 
-    const desc = colDesc !== -1 && row[colDesc] ? fixEncoding(row[colDesc]) : 'Movimentação sem descrição';
-    
     // Normalizar referência (ORDER_ID)
     const ref = colRef !== -1 && row[colRef] ? normalizeReference(row[colRef]) : undefined;
+
+    let descRaw = colDesc !== -1 && row[colDesc] ? row[colDesc] : 'Movimentação sem descrição';
+    let desc = colDesc !== -1 && row[colDesc] ? fixEncoding(row[colDesc]) : 'Movimentação sem descrição';
+
+    // Melhorar descrições fracas com o nome do produto (se disponível)
+    if (colProduct !== -1 && row[colProduct] && String(row[colProduct]).trim() !== '') {
+      const dLower = String(desc).toLowerCase();
+      if (dLower.includes('chegou em') || dLower.includes('pagamento') || dLower.includes('recebimento') || dLower.length < 5) {
+        descRaw = row[colProduct];
+        desc = fixEncoding(row[colProduct]);
+      }
+    } else if (source === 'Mercado Livre' && mode === 'sales') {
+      // Regra ML: Se não há produto/título útil, usar fallback hardcoded Venda Mercado Livre #REF
+      const titleFallback = ref ? `Venda Mercado Livre #${ref}` : 'Venda Mercado Livre';
+      descRaw = titleFallback;
+      desc = titleFallback;
+    }
+    
+    // Função de normalização robusta
+    const normalize = (text: unknown): string => {
+      return (text || '')
+        .toString()
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    };
+
+    const normalizedDesc = normalize(descRaw);
+
+    // REGRA ESPECÍFICA: Mercado Pago + Modo Bank
+    if (source === 'Mercado Pago' && mode === 'bank') {
+      console.log('MP BANK - DESC RAW:', descRaw, '| NORMALIZED:', normalizedDesc);
+      if (normalizedDesc !== 'pagamento') {
+        continue; // Ignora tudo que não é estritamente 'pagamento'
+      }
+    }
+    
+    // A referência já foi normalizada acima
     
     let dateStr = new Date().toISOString();
     if (colDate !== -1 && row[colDate]) {
@@ -140,6 +210,11 @@ export async function processImportFile(
     processedRows.add(rowKey);
 
     const primaryLineId = generateId();
+    let detectedType = inferLineType(desc, amount, mode);
+    if (source === 'Mercado Pago' && mode === 'bank' && normalizedDesc === 'pagamento') {
+      detectedType = 'entrada_liquidada';
+    }
+
     parsedLines.push({
       id: primaryLineId,
       rawData: row,
@@ -147,7 +222,7 @@ export async function processImportFile(
       date: dateStr,
       description: desc,
       reference: ref,
-      detectedType: inferLineType(desc, amount, mode)
+      detectedType
     });
 
     // --- REGRA DE EXCLUSIVIDADE ---
@@ -280,6 +355,12 @@ function parseDateString(rDate: string, format: 'DMY' | 'MDY'): string {
     const p1 = parseInt(parts[0]);
     const p2 = parseInt(parts[1]);
     const p3 = parseInt(parts[2]);
+    
+    // ISO Format: YYYY-MM-DD
+    if (p1 > 1000) {
+      return new Date(p1, p2 - 1, p3, 12, 0, 0).toISOString();
+    }
+    
     const year = p3 > 100 ? p3 : (p3 < 50 ? 2000 + p3 : 1900 + p3);
     
     if (format === 'DMY') {
@@ -396,7 +477,7 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     }
   }
 
-  const primaryLine = lines.find(l => l.detectedType === 'venda' || l.detectedType === 'repasse' || l.detectedType === 'liberacao' || l.detectedType === 'transferencia' || l.detectedType === 'deposito') || lines[0];
+  const primaryLine = lines.find(l => l.detectedType === 'venda' || l.detectedType === 'repasse' || l.detectedType === 'liberacao' || l.detectedType === 'transferencia' || l.detectedType === 'deposito' || l.detectedType === 'entrada_liquidada') || lines[0];
   let primaryType = primaryLine.detectedType as ImportEvent['primaryType'];
 
   // Ajuste de PrimaryType baseado no Modo
@@ -406,8 +487,12 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
       primaryType = 'venda';
     }
   } else if (mode === 'bank') {
-    // Nunca ser venda no modo banco
-    if (primaryType === 'venda') primaryType = 'outros';
+    // Preservar 'entrada_liquidada' caso seja Mercado Pago, ou caso não seja mudar 'venda' para 'outros'
+    if (primaryType === 'entrada_liquidada') {
+      // mantém
+    } else if (primaryType === 'venda') {
+      primaryType = 'outros';
+    }
   }
 
   let title = primaryLine.description || 'Transação Financeira';
@@ -430,7 +515,7 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
   expected.setDate(expected.getDate() + days);
   
   // Regra de Ouro: Tipos de liquidação externa sempre são históricos (já ocorreram)
-  const isExternalLiquidation = ['transferencia', 'deposito', 'antecipacao'].includes(primaryType);
+  const isExternalLiquidation = ['transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(primaryType);
   const isInternalLiquidation = ['liberacao', 'repasse'].includes(primaryType);
   
   let historical = isExternalLiquidation || isInternalLiquidation || expected < new Date();

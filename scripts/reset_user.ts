@@ -37,32 +37,32 @@ const DEFAULT_CATEGORIES = [
   // Receita
   { name: 'Vendas de Produtos', kind: 'receita', dre_classification: 'receita_bruta' },
   { name: 'Vendas de Serviços', kind: 'receita', dre_classification: 'receita_bruta' },
-  { name: 'Outras Receitas', kind: 'receita', dre_classification: 'outras_receitas' },
+  { name: 'Outras Receitas', kind: 'receita', dre_classification: 'outro' },
   // Custo
-  { name: 'Custo de Mercadorias', kind: 'custo', dre_classification: 'cmv' },
-  { name: 'Custo de Serviços', kind: 'custo', dre_classification: 'csv' },
-  { name: 'Matéria-Prima', kind: 'custo', dre_classification: 'cmv' },
+  { name: 'Custo de Mercadorias', kind: 'custo', dre_classification: 'custo_variavel' },
+  { name: 'Custo de Serviços', kind: 'custo', dre_classification: 'custo_variavel' },
+  { name: 'Matéria-Prima', kind: 'custo', dre_classification: 'custo_variavel' },
   // Despesa
-  { name: 'Aluguel', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Energia Elétrica', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Água', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Internet / Telefone', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Salários', kind: 'despesa', dre_classification: 'despesas_com_pessoal' },
-  { name: 'Marketing / Publicidade', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Material de Escritório', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Transporte', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Alimentação', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Manutenção', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Contador', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Seguros', kind: 'despesa', dre_classification: 'despesas_operacionais' },
-  { name: 'Impostos sobre Vendas', kind: 'despesa', dre_classification: 'impostos_vendas' },
+  { name: 'Aluguel', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Energia Elétrica', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Água', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Internet / Telefone', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Salários', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Marketing / Publicidade', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Material de Escritório', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Transporte', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Alimentação', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Manutenção', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Contador', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Seguros', kind: 'despesa', dre_classification: 'despesa_fixa' },
+  { name: 'Impostos sobre Vendas', kind: 'despesa', dre_classification: 'deducao_imposto' },
   // Investimento
-  { name: 'Equipamentos', kind: 'investimento', dre_classification: 'investimentos' },
-  { name: 'Reformas', kind: 'investimento', dre_classification: 'investimentos' },
+  { name: 'Equipamentos', kind: 'investimento', dre_classification: 'investimento' },
+  { name: 'Reformas', kind: 'investimento', dre_classification: 'investimento' },
   // Financeiro
-  { name: 'Juros / Multas', kind: 'financeiro', dre_classification: 'despesas_financeiras' },
-  { name: 'Tarifas Bancárias', kind: 'financeiro', dre_classification: 'despesas_financeiras' },
-  { name: 'Rendimentos', kind: 'financeiro', dre_classification: 'receitas_financeiras' },
+  { name: 'Juros / Multas', kind: 'financeiro', dre_classification: 'financeiro' },
+  { name: 'Tarifas Bancárias', kind: 'financeiro', dre_classification: 'financeiro' },
+  { name: 'Rendimentos', kind: 'financeiro', dre_classification: 'financeiro' },
 ];
 
 async function main() {
@@ -71,7 +71,7 @@ async function main() {
   console.log(`=== RESET COMPLETO DO USUÁRIO ===`);
   console.log(`Usuário alvo: ${email}\n`);
 
-  rl.question(`Digite a senha para ${email}: `, async (password) => {
+  const runReset = async (password: string) => {
     try {
       console.log('\nAutenticando...');
       const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -145,7 +145,13 @@ async function main() {
       rl.close();
       process.exit(0);
     }
-  });
+  };
+
+  if (process.argv[3]) {
+    runReset(process.argv[3]);
+  } else {
+    rl.question(`Digite a senha para ${email}: `, (pass) => runReset(pass));
+  }
 }
 
 main();

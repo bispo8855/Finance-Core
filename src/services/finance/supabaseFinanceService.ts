@@ -95,7 +95,8 @@ export class SupabaseFinanceService implements IFinanceService {
         description: payload.description,
         gross_amount: payload.grossAmount,
         marketplace_fee: payload.marketplaceFee,
-        shipping_cost: payload.shippingCost
+        shipping_cost: payload.shippingCost,
+        reference_id: payload.referenceId
       })
       .select()
       .single();
@@ -234,7 +235,8 @@ export class SupabaseFinanceService implements IFinanceService {
         category_id: payload.categoryId,
         competence_date: payload.competenceDate,
         total_amount: payload.totalValue,
-        description: payload.description
+        description: payload.description,
+        reference_id: payload.referenceId
       })
       .eq('id', documentId)
       .select()
@@ -760,7 +762,8 @@ export class SupabaseFinanceService implements IFinanceService {
       createdAt: row.created_at,
       grossAmount: row.gross_amount ? Number(row.gross_amount) : undefined,
       marketplaceFee: row.marketplace_fee ? Number(row.marketplace_fee) : undefined,
-      shippingCost: row.shipping_cost ? Number(row.shipping_cost) : undefined
+      shippingCost: row.shipping_cost ? Number(row.shipping_cost) : undefined,
+      referenceId: row.reference_id || undefined
     };
   }
 

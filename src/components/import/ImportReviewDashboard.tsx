@@ -25,11 +25,15 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
     setEvents(prev => prev.map(ev => ev.id === id ? { ...ev, status } : ev));
   };
 
+  const handleEventUpdate = (id: string, updates: Partial<ImportEvent>) => {
+    setEvents(prev => prev.map(ev => ev.id === id ? { ...ev, ...updates } : ev));
+  };
+
   const filteredEvents = useMemo(() => {
     if (filter === 'todos') return events;
     if (filter === 'pendentes') return events.filter(e => e.status === 'pendente');
     if (filter === 'aprovados') return events.filter(e => e.status === 'aprovado');
-    if (filter === 'revisar') return events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto');
+    if (filter === 'revisar') return events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto' || e.confidence === 'media');
     return events;
   }, [events, filter]);
 
@@ -38,7 +42,7 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
     const aprovados = events.filter(e => e.status === 'aprovado').length;
     const ignorados = events.filter(e => e.status === 'ignorado').length;
     const pendentes = events.filter(e => e.status === 'pendente').length;
-    const revisar = events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto').length;
+    const revisar = events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto' || e.confidence === 'media').length;
     
     return { total, aprovados, ignorados, pendentes, revisar };
   }, [events]);
@@ -85,18 +89,15 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
                 O Aurys agrupou {batch.linesCount} linhas da planilha em {stats.total} eventos financeiros.
               </h3>
             </div>
-            <div className="flex items-center gap-4 mt-6">
-              {stats.pendentes > 0 ? (
-                <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full text-sm flex items-center font-medium">
-                  <AlertTriangle className="w-4 h-4 mr-2" />
-                  {stats.pendentes} pendentes
-                </span>
-              ) : (
-                <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-sm flex items-center font-medium">
-                  <CheckCircle2 className="w-4 h-4 mr-2" />
-                  Pronto para importar
-                </span>
-              )}
+            <div className="flex items-center gap-4 mt-6 flex-wrap">
+              <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-3 py-1 rounded-full text-sm flex items-center font-medium">
+                <CheckCircle2 className="w-4 h-4 mr-2" />
+                {Math.round((events.filter(e => e.confidence === 'alta' && e.status !== 'ignorado').length / Math.max(stats.total, 1)) * 100)}% Auto-Conciliados
+              </span>
+              <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-3 py-1 rounded-full text-sm flex items-center font-medium">
+                <AlertTriangle className="w-4 h-4 mr-2" />
+                {Math.round((stats.revisar / Math.max(stats.total, 1)) * 100)}% Pendentes de Revisão
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -163,6 +164,7 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
               key={event.id} 
               event={event} 
               onStatusChange={handleStatusChange} 
+              onUpdateEvent={handleEventUpdate}
             />
           ))
         )}

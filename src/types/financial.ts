@@ -49,6 +49,7 @@ export interface FinancialDocument {
   grossAmount?: number;
   marketplaceFee?: number;
   shippingCost?: number;
+  referenceId?: string;
 }
 
 export interface Title {

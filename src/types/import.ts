@@ -1,9 +1,9 @@
-export type ImportConfidence = 'alta' | 'revisar' | 'incompleto' | 'duplicidade';
+export type ImportConfidence = 'alta' | 'media' | 'revisar' | 'incompleto' | 'duplicidade';
 export type ImportMode = 'sales' | 'bank' | 'generic';
 
 export type ImportEventStatus = 'aprovado' | 'ignorado' | 'pendente';
 
-export type ImportSource = 'Mercado Livre' | 'Shopee' | 'Shopify' | 'Gateway' | 'Outro';
+export type ImportSource = 'Mercado Livre' | 'Mercado Pago' | 'Shopee' | 'Shopify' | 'Gateway' | 'Outro';
 
 export interface ImportRawLine {
   id: string; // uuid local
@@ -38,14 +38,20 @@ export interface ImportEvent {
   // Explicação sobre por que esse evento foi agrupado
   explanation?: string;
   // Natureza financeira
-  primaryType: 'venda' | 'repasse' | 'liberacao' | 'transferencia' | 'deposito' | 'antecipacao' | 'recebivel_futuro' | 'pedido' | 'outros';
+  primaryType: 'venda' | 'repasse' | 'liberacao' | 'transferencia' | 'deposito' | 'antecipacao' | 'entrada_liquidada' | 'recebivel_futuro' | 'pedido' | 'outros';
   // Referência do pedido/transação (normalizada)
   reference?: string;
   // New fields for Reconciliation
   flags?: string[]; // e.g., ['duplicate']
   historical?: boolean; // true for historic imports where receipt date already passed
   reconciliationId?: string; // ID of existing title for match
-  reconciliationType?: 'match' | 'multiple' | 'none';
+  reconciliationType?: 'match' | 'multiple' | 'none' | 'divergence';
+  reconciliationCandidates?: {
+    id: string; // Title ID
+    description: string;
+    value: number;
+    date: string;
+  }[];
   // Traceability
   valueSource?: 'net_column' | 'calculated' | 'single_amount';
 }

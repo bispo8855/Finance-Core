@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useDRE } from '@/hooks/finance/useDRE';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@/components/ui/collapsible';
+import { MonthYearPicker } from '@/components/shared/MonthYearPicker';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pct = (part: number, total: number) => total === 0 ? '0%' : (part / total * 100).toFixed(1) + '%';
@@ -14,12 +15,9 @@ const months = [
 ];
 
 export default function DREPage() {
-  const currentMonth = new Date().getMonth();
-  const currentYear = new Date().getFullYear();
-  const [month, setMonth] = useState(currentMonth);
-  const [year] = useState(currentYear);
+  const [currentDate, setCurrentDate] = useState<Date>(new Date());
 
-  const monthStr = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const monthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const { data: dre, isLoading } = useDRE(monthStr);
 
   if (isLoading || !dre) {
@@ -83,13 +81,8 @@ export default function DREPage() {
         </Fragment>
       ) : null}
 
-      <div className="flex gap-1 bg-muted rounded-lg p-0.5 overflow-x-auto w-fit">
-        {months.map((m, i) => (
-          <button key={i} onClick={() => setMonth(i)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors whitespace-nowrap ${month === i ? 'bg-card shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}>
-            {m.substring(0, 3)}
-          </button>
-        ))}
+      <div className="flex w-full items-center">
+        <MonthYearPicker date={currentDate} onChange={setCurrentDate} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -176,7 +169,7 @@ export default function DREPage() {
 
       <div className="bg-card rounded-xl border shadow-sm">
         <div className="p-4 border-b">
-          <h3 className="font-semibold">{months[month]} {year}</h3>
+          <h3 className="font-semibold">{months[currentDate.getMonth()]} {currentDate.getFullYear()}</h3>
         </div>
         <div className="p-2 space-y-0.5">
           <DRERow label="Receita Bruta" value={dre.receitaBruta} bold />
