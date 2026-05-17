@@ -256,6 +256,59 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                 </div>
               )}
 
+              {/* SETTLEMENT VISUAL VALIDATION */}
+              <div className="mt-4 bg-slate-50 border border-slate-200 rounded-md p-3 text-xs space-y-2">
+                 <h6 className="font-bold text-slate-800 uppercase tracking-tight flex items-center gap-1.5 mb-2 border-b border-slate-200 pb-1.5">
+                   <Check className="w-3.5 h-3.5" /> Análise Automática
+                 </h6>
+                 <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Decisão sugerida:</span>
+                    <span className="font-bold text-slate-900">
+                       {event.settlementStatus === 'settled' ? 'Recebimento Liquidado' : event.settlementStatus === 'review' ? 'Revisar Liquidação' : 'Venda Prevista'}
+                    </span>
+                 </div>
+                 <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Ação recomendada:</span>
+                    <span className="font-medium text-slate-700 text-right">
+                       {event.settlementStatus === 'settled' 
+                          ? (event.reconciliationType === 'match' ? 'Baixar título existente' : 'Criar como recebido (Caixa)')
+                          : event.settlementStatus === 'review' 
+                             ? 'Revisar antes de importar' 
+                             : 'Criar título previsto'}
+                    </span>
+                 </div>
+                 <div className="flex justify-between">
+                    <span className="text-slate-500 font-medium">Data usada:</span>
+                    <span className="font-medium text-slate-700">
+                       {event.settlementStatus === 'settled' || event.primaryType === 'entrada_liquidada' || event.mode === 'bank'
+                          ? `Recebimento: ${formatDate(event.date)}`
+                          : `Vencimento: ${(() => {
+                              const days = settlementDaysBySource[event.source] ?? settlementDaysBySource.default;
+                              const dDate = new Date(event.date);
+                              dDate.setDate(dDate.getDate() + days);
+                              return formatDate(dDate.toISOString());
+                            })()}`
+                       }
+                    </span>
+                 </div>
+                 {event.settlementReason && (
+                    <div className="mt-2 pt-2 border-t border-slate-200">
+                       <span className="text-slate-500 font-medium block mb-0.5">Motivo:</span>
+                       <span className="text-slate-600 italic leading-relaxed">{event.settlementReason}</span>
+                    </div>
+                 )}
+                 <div className="flex items-center gap-2 mt-2 pt-2 border-t border-slate-200">
+                    <span className="text-slate-500 font-medium">Confiança:</span>
+                    <Badge variant="outline" className={cn("text-[10px] uppercase font-bold",
+                       event.settlementConfidence! >= 0.85 ? "text-emerald-700 border-emerald-200 bg-emerald-50" :
+                       event.settlementConfidence! >= 0.6 ? "text-blue-700 border-blue-200 bg-blue-50" :
+                       "text-amber-700 border-amber-200 bg-amber-50"
+                    )}>
+                       {event.settlementConfidence! >= 0.85 ? 'Alta' : event.settlementConfidence! >= 0.6 ? 'Média' : 'Baixa'}
+                    </Badge>
+                 </div>
+              </div>
+
               {event.explanation && (
                 <div className="mt-4 bg-blue-50/50 p-3 rounded-md border border-blue-100 text-xs text-blue-800">
                   <span className="font-semibold block mb-1">Resultado da Análise:</span>

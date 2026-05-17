@@ -16,6 +16,10 @@ export interface ImportRawLine {
   date: string; // ISO string
   reference?: string; // ID do pedido ou transação na origem
   description: string;
+  
+  settlementStatus?: 'predicted' | 'settled' | 'review';
+  settlementConfidence?: number;
+  settlementReason?: string;
 }
 
 export interface ImportEvent {
@@ -60,6 +64,11 @@ export interface ImportEvent {
   // Classification & Conciliation
   classificationStatus?: ClassificationStatus;
   matchConfidence?: MatchConfidence;
+  
+  // Settlement Inference
+  settlementStatus?: 'predicted' | 'settled' | 'review';
+  settlementConfidence?: number;
+  settlementReason?: string;
 }
 
 export interface ImportBatch {

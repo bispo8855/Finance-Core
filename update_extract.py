@@ -1,8 +1,10 @@
-import { Movement, Title, FinancialDocument, Category, BankAccount, Contact } from '@/types/financial';
-import { getPeriodRange, PeriodOption } from '@/lib/dateUtils';
-import { parseISO } from 'date-fns';
+import re
 
-// ==================== TYPES ====================
+with open('src/domain/extract.ts', 'r', encoding='utf-8') as f:
+    content = f.read()
+
+# Replace the types at the top
+types_replacement = """// ==================== TYPES ====================
 
 export type EventOrigin = 'manual' | 'bank' | 'ecommerce' | 'system';
 
@@ -106,217 +108,17 @@ export interface FinancialEvent {
   resultImpactAmount: number;
   semanticBreakdown: FinancialCompositionItem[];
 }
+"""
 
-export interface StatementBalances {
-  previousBalance: number;
-  inflows: number;
-  outflows: number;
-  finalBalance: number;
-}
+content = re.sub(r'// ==================== TYPES ====================.*?export interface StatementBalances', types_replacement + '\nexport interface StatementBalances', content, flags=re.DOTALL)
 
-export interface ExtractStats {
-  totalEvents: number;
-  totalSales: number;
-  totalFees: number;
-  totalReserves: number;
-  totalPending: number;
-  feePercentage: number;
-  grossSales: number;
-}
-
-// ==================== FORMATTING ====================
-
-const fmt = (v: number) => 'R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-
-// ==================== EXECUTIVE SUMMARY ====================
-
-export function buildExtractExecutiveMessage(
-  stats: { inflows: number; outflows: number; balance: number },
-  extractStats?: ExtractStats
-): string {
-  const { inflows, outflows } = stats;
-  const net = inflows - outflows;
-
-  if (inflows === 0 && outflows === 0) return "Nenhuma movimentação registrada no período selecionado.";
-
-  const parts: string[] = [];
-
-  if (net > 0) {
-    parts.push(`Você recebeu ${fmt(net)} líquidos neste período.`);
-  } else if (net < 0) {
-    parts.push(`O caixa ficou pressionado: saídas superaram entradas em ${fmt(Math.abs(net))}.`);
-  } else {
-    parts.push("Entradas e saídas ficaram equilibradas neste período.");
-  }
-
-  if (extractStats) {
-    if (extractStats.totalFees > 0) {
-      parts.push(`${fmt(extractStats.totalFees)} foram consumidos em taxas e custos operacionais.`);
-    }
-    if (extractStats.totalReserves > 0) {
-      parts.push(`${fmt(extractStats.totalReserves)} ficaram retidos em reservas temporárias.`);
-    }
-    if (extractStats.totalPending > 0) {
-      parts.push(`${extractStats.totalPending} movimentação(ões) pendente(s) de classificação.`);
-    }
-    if (extractStats.feePercentage > 0 && extractStats.feePercentage <= 100) {
-      parts.push(`Taxas representaram ${extractStats.feePercentage.toFixed(0)}% das vendas brutas.`);
-    }
-  }
-
-  return parts.join(' ');
-}
-
-// ==================== STATEMENT BALANCES ====================
-
-export function calculateStatementBalances(
-  movements: Movement[],
-  accounts: BankAccount[],
-  period: PeriodOption,
-  accountId: string
-): StatementBalances {
-  const { start, end } = getPeriodRange(period);
-
-  let baseOpening = 0;
-  if (accountId === 'all') {
-    baseOpening = accounts.reduce((sum, acc) => sum + acc.openingBalance, 0);
-  } else {
-    baseOpening = accounts.find(a => a.id === accountId)?.openingBalance || 0;
-  }
-
-  let previousBalanceMovements = 0;
-  let inflows = 0;
-  let outflows = 0;
-
-  movements.forEach(m => {
-    const isTargetAccount = accountId === 'all' || m.accountId === accountId;
-    if (!isTargetAccount) return;
-
-    const mDate = parseISO(m.paymentDate);
-    const mValue = m.valuePaid * (m.type === 'saida' ? -1 : 1);
-
-    if (start && mDate < start) {
-      previousBalanceMovements += mValue;
-    } else if ((!start || mDate >= start) && (!end || mDate <= end)) {
-      if (m.type === 'entrada') inflows += m.valuePaid;
-      else outflows += m.valuePaid;
-    }
-  });
-
-  const previousBalance = baseOpening + previousBalanceMovements;
-  const finalBalance = previousBalance + inflows - outflows;
-
-  return { previousBalance, inflows, outflows, finalBalance };
-}
-
-// ==================== EVENT TYPE CLASSIFICATION ====================
-
-function classifyEventType(doc: FinancialDocument, category?: Category): FinancialEventType {
-  const desc = (doc.description || '').toLowerCase();
-
-  // Pendente de classificação
-  if (desc.includes('pendente de classificação') || desc.includes('⏳')) return 'pending';
-
-  // Chargeback / Estorno
-  if (desc.includes('chargeback') || desc.includes('estorno') || desc.includes('reembolso')) return 'chargeback';
-
-  // Reserva
-  if (desc.includes('reserva') || desc.includes('retenção') || desc.includes('retencao') ||
-      desc.includes('bloqueio') || desc.includes('withholding') || desc.includes('reserve')) return 'reserve';
-
-  // Repasse / Transferência
-  if (desc.includes('repasse') || desc.includes('liberação') || desc.includes('liberacao') ||
-      desc.includes('payout') || desc.includes('liquidação') || desc.includes('liquidacao')) return 'repasse';
-
-  // Transferência bancária
-  if (desc.includes('transferência') || desc.includes('transferencia') ||
-      desc.includes('ted') || desc.includes('pix') || desc.includes('depósito') || desc.includes('deposito')) return 'transfer';
-
-  // Ajuste
-  if (desc.includes('ajuste') || desc.includes('compensação') || desc.includes('compensacao')) return 'adjustment';
-
-  // Venda (por tipo de documento)
-  if (doc.type === 'venda') return 'sale';
-
-  // Despesa
-  if (doc.type === 'despesa' || doc.type === 'compra') return 'expense';
-
-  // Receita avulsa
-  if (doc.type === 'receita_avulsa' || doc.type === 'receita') return 'revenue';
-
-  // Categoria financeira
-  if (category?.type === 'financeiro') return 'transfer';
-
-  return 'other';
-}
-
-function classifyOrigin(doc: FinancialDocument): EventOrigin {
-  if (doc.sourceType) return 'ecommerce';
-  if (doc.grossAmount && doc.grossAmount > 0) return 'ecommerce';
-  if (doc.referenceId) return 'ecommerce';
-  return 'manual';
-}
-
-// ==================== IMPACT ANALYSIS ====================
-
-function analyzeImpact(eventType: FinancialEventType): { affectsCash: boolean; affectsResult: boolean } {
-  switch (eventType) {
-    case 'sale':
-    case 'expense':
-    case 'revenue':
-    case 'chargeback':
-      return { affectsCash: true, affectsResult: true };
-    case 'transfer':
-    case 'reserve':
-      return { affectsCash: true, affectsResult: false };
-    case 'repasse':
-      return { affectsCash: true, affectsResult: false }; // Repasse move caixa, resultado já estava na venda
-    case 'pending':
-      return { affectsCash: false, affectsResult: false }; // Pendente não impacta nada até classificar
-    default:
-      return { affectsCash: true, affectsResult: true };
-  }
-}
-
-// ==================== STATUS ANALYSIS ====================
-
-function analyzeEventStatus(
-  doc: FinancialDocument,
-  eventType: FinancialEventType,
-  category?: Category
-): { status: FinancialEventStatus; reason?: string } {
-  if (eventType === 'pending') {
-    return { status: 'warning', reason: 'Movimentação pendente de classificação. Não impacta DRE até ser resolvida.' };
-  }
-
-  if (doc.grossAmount && doc.marketplaceFee) {
-    const feeRatio = doc.marketplaceFee / doc.grossAmount;
-    if (feeRatio > 0.20) return { status: 'problem', reason: 'Taxas acima de 20% consomem muito da sua margem neste evento.' };
-    if (feeRatio >= 0.12) return { status: 'warning', reason: 'Taxas entre 12% e 20%. Atenção ao custo de venda neste canal.' };
-  }
-
-  const vagueTerms = ['movimentação', 'teste', 'extra', 'avulso', 'avulsa'];
-  const desc = (doc.description || '').toLowerCase();
-  if (vagueTerms.some(term => desc.includes(term))) {
-    return { status: 'warning', reason: 'Descrição genérica dificulta a análise futura.' };
-  }
-
-  if (!category || category.name === 'Sem Categoria') {
-    return { status: 'warning', reason: 'Evento sem categoria prejudica a organização do seu DRE.' };
-  }
-
-  return { status: 'ok' };
-}
-
-// ==================== MICROCOPY ====================
-
-function buildEventMicrocopy(
+# Update buildEventMicrocopy
+microcopy_replacement = """function buildEventMicrocopy(
   eventType: FinancialEventType,
   doc: FinancialDocument,
   netAmount: number,
   movementCount: number,
-  eventKind?: FinancialEventKind,
-  accountIdFilter?: string
+  eventKind?: FinancialEventKind
 ): string | undefined {
   const gross = doc.grossAmount || 0;
   const fees = doc.marketplaceFee || 0;
@@ -327,10 +129,7 @@ function buildEventMicrocopy(
       return 'Esta liberação aumentou o caixa, mas não representa nova receita.';
   }
   if (eventKind === 'internal_transfer') {
-      if (accountIdFilter === 'all') {
-          return 'Transferência entre contas. Não altera o caixa consolidado nem o resultado.';
-      }
-      return 'Transferência entre contas. Não altera o resultado.';
+      return 'Transferência entre contas não altera o resultado.';
   }
   if (eventKind === 'unclassified') {
       return 'Movimento sem vínculo claro. Revise para classificar ou vincular.';
@@ -348,55 +147,11 @@ function buildEventMicrocopy(
       }
       return `Venda registrada de ${fmt(netAmount)}.`;
     }
+"""
+content = re.sub(r'function buildEventMicrocopy\([\s\S]*?case \'sale\': \{[\s\S]*?if \(gross > 0\) \{[\s\S]*?return `Venda de \$\{fmt\(gross\)\} sem deduções registradas\.`;\n      \}\n      return `Venda registrada de \$\{fmt\(netAmount\)\}\.`;\n    \}', microcopy_replacement, content)
 
-    case 'repasse':
-      return source
-        ? `Repasse recebido do ${source}.`
-        : 'Repasse recebido do marketplace.';
-
-    case 'reserve':
-      return 'O marketplace reteve parte do valor temporariamente.';
-
-    case 'expense':
-      return `Despesa operacional de ${fmt(netAmount)}.`;
-
-    case 'chargeback':
-      return 'Estorno ou chargeback registrado. Impacta caixa e resultado.';
-
-    case 'pending':
-      return 'Movimentação pendente de classificação. Classifique para impactar o DRE corretamente.';
-
-    case 'transfer':
-      if (accountIdFilter === 'all') {
-          return 'Transferência entre contas. Não altera o caixa consolidado nem o resultado.';
-      }
-      return 'Transferência entre contas. Não altera o resultado.';
-
-    case 'adjustment':
-      return 'Ajuste ou compensação financeira.';
-
-    default:
-      return undefined;
-  }
-}
-
-// ==================== TAG MAPPING ====================
-
-function getItemTag(detectedType: string): string | undefined {
-  const tagMap: Record<string, string> = {
-    'Venda Bruta': 'Venda',
-    'Taxa Marketplace': 'Taxa',
-    'Frete': 'Frete',
-    'Reserva': 'Reserva',
-    'Repasse': 'Repasse',
-    'Estorno': 'Estorno',
-    'Antecipação': 'Antecipação',
-    'Ajuste': 'Ajuste',
-  };
-  return tagMap[detectedType];
-}
-
-// ==================== MAIN GROUPING FUNCTION (V2 Engine + Adapter) ====================
+# Replace groupMovementsIntoEvents completely
+group_replacement = """// ==================== MAIN GROUPING FUNCTION (V2 Engine + Adapter) ====================
 
 export function buildFinancialComposition(
   movements: Movement[],
@@ -514,10 +269,11 @@ export function buildFinancialComposition(
         });
       }
       
-      const itemsSum = semanticBreakdown.reduce((acc, i) => acc + i.amount, 0);
+      const itemsSum = semanticBreakdown.reduce((acc, i) => acc + (i.direction === 'inflow' ? i.amount : i.amount), 0); // Wait, amounts are already negative? I pushed -feesAmount. Let's sum as is.
       if (Math.abs(totalPaid - itemsSum) > 0.01 && totalAbsolute > 0) {
          const diff = totalPaid - itemsSum;
-         if (diff < 0) {
+         const isReserve = doc.description.toLowerCase().includes('reserva') || eventType === 'reserve';
+         if (isReserve) {
             reserveAmount = Math.abs(diff);
             semanticBreakdown.push({
               id: `${docId}-reserve`,
@@ -529,7 +285,7 @@ export function buildFinancialComposition(
               affectsResult: false,
               isTemporary: true,
               confidence: 0.8,
-              explanation: 'R$ ' + Math.abs(diff).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' ficaram retidos e não caíram no caixa.'
+              explanation: 'R$ ' + Math.abs(diff).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + ' ficaram temporariamente retidos e ainda não caíram no caixa.'
             });
          } else {
             semanticBreakdown.push({
@@ -537,7 +293,7 @@ export function buildFinancialComposition(
               semanticType: 'adjustment',
               label: 'Outros ajustes',
               amount: diff,
-              direction: 'inflow',
+              direction: diff > 0 ? 'inflow' : 'outflow',
               affectsCash: true,
               affectsResult: true,
               isTemporary: false,
@@ -567,14 +323,14 @@ export function buildFinancialComposition(
       semanticBreakdown.push({
         id: docId,
         semanticType: 'internal_transfer',
-        label: totalPaid > 0 ? 'Transferência recebida' : 'Transferência enviada',
+        label: 'Transferência Interna',
         amount: totalPaid,
         direction: totalPaid > 0 ? 'inflow' : 'outflow',
         affectsCash: accountIdFilter !== 'all', 
         affectsResult: false,
         isTemporary: false,
         confidence: 0.9,
-        explanation: 'Movimentação entre contas bancárias.'
+        explanation: 'Transferência entre contas não altera o resultado.'
       });
     } else if (eventType === 'chargeback') {
       eventKind = 'chargeback';
@@ -620,7 +376,7 @@ export function buildFinancialComposition(
       });
     } else {
       eventKind = 'unclassified';
-      resultImpactAmount = 0;
+      resultImpactAmount = totalPaid;
       semanticBreakdown.push({
         id: docId,
         semanticType: 'unclassified_movement',
@@ -628,7 +384,7 @@ export function buildFinancialComposition(
         amount: totalPaid,
         direction: totalPaid > 0 ? 'inflow' : 'outflow',
         affectsCash: true,
-        affectsResult: false,
+        affectsResult: true,
         isTemporary: false,
         confidence: 0.2,
         explanation: 'Movimento sem vínculo claro. Revise para classificar ou vincular.'
@@ -659,7 +415,7 @@ export function buildFinancialComposition(
       insight = 'Transferência entre contas.';
     }
 
-    const humanSummary = buildEventMicrocopy(eventType, doc, totalPaid, docMovements.length, eventKind, accountIdFilter);
+    const humanSummary = buildEventMicrocopy(eventType, doc, totalPaid, docMovements.length, eventKind);
 
     let eventTitle = doc.description || 'Movimentação';
     eventTitle = eventTitle.replace(/\[#[^\]]+\]\s*/, '').replace(/\[⏳[^\]]+\]\s*/, '').trim();
@@ -681,7 +437,7 @@ export function buildFinancialComposition(
       type: movementType,
       totalAmount: totalAbsolute,
       netAmount: totalPaid,
-      affectsResult: eventKind === 'unclassified' ? false : impact.affectsResult,
+      affectsResult: impact.affectsResult,
       affectsCash: impact.affectsCash,
       insight,
       status,
@@ -717,7 +473,7 @@ export function buildFinancialComposition(
       type: m.type,
       totalAmount: m.valuePaid,
       netAmount: amount,
-      affectsResult: false, 
+      affectsResult: true, 
       affectsCash: true,
       status: 'warning',
       statusReason: 'Movimento sem vínculo claro. Revise para classificar ou vincular.',
@@ -726,7 +482,7 @@ export function buildFinancialComposition(
         description: m.notes || 'Movimento não classificado',
         amount: amount,
         type: m.type,
-        affectsResult: false
+        affectsResult: true
       }],
       eventType: 'other',
       groupKey: `orphan:${m.id}`,
@@ -736,7 +492,7 @@ export function buildFinancialComposition(
       reserveAmount: 0,
       humanSummary: 'Movimento sem vínculo claro. Revise para classificar ou vincular.',
       eventKind: 'unclassified',
-      resultImpactAmount: 0,
+      resultImpactAmount: amount,
       semanticBreakdown: [{
         id: m.id,
         semanticType: 'unclassified_movement',
@@ -744,7 +500,7 @@ export function buildFinancialComposition(
         amount: amount,
         direction: m.type === 'entrada' ? 'inflow' : 'outflow',
         affectsCash: true,
-        affectsResult: false,
+        affectsResult: true,
         isTemporary: false,
         confidence: 0.1,
         explanation: 'Movimento sem vínculo claro. Revise para classificar ou vincular.'
@@ -756,42 +512,10 @@ export function buildFinancialComposition(
   return events;
 }
 
+// For compatibility, export groupMovementsIntoEvents pointing to buildFinancialComposition
 export const groupMovementsIntoEvents = buildFinancialComposition;
+"""
+content = re.sub(r'// ==================== MAIN GROUPING FUNCTION ====================[\s\S]*?return events;\n\}', group_replacement, content)
 
-// ==================== EXTRACT STATS ====================
-
-export function calculateExtractStats(events: FinancialEvent[]): ExtractStats {
-  let totalSales = 0;
-  let totalFees = 0;
-  let totalReserves = 0;
-  let grossSales = 0;
-  let totalPending = 0;
-
-  for (const ev of events) {
-    if (ev.eventType === 'sale') {
-      totalSales++;
-      grossSales += ev.grossAmount;
-      totalFees += ev.feesAmount;
-    }
-    if (ev.eventType === 'reserve') {
-      totalReserves += Math.abs(ev.netAmount);
-    }
-    if (ev.eventType === 'pending') {
-      totalPending++;
-    }
-    // Also count fees from non-sale ecommerce events
-    if (ev.eventType !== 'sale' && ev.feesAmount > 0) {
-      totalFees += ev.feesAmount;
-    }
-  }
-
-  return {
-    totalEvents: events.length,
-    totalSales,
-    totalFees,
-    totalReserves,
-    totalPending,
-    feePercentage: grossSales > 0 ? (totalFees / grossSales) * 100 : 0,
-    grossSales
-  };
-}
+with open('src/domain/extract.ts', 'w', encoding='utf-8') as f:
+    f.write(content)

@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
-import { ArrowUpCircle, ArrowDownCircle, Wallet, Activity, Plus, Minus, Equal } from "lucide-react";
+import { ArrowUpCircle, ArrowDownCircle, Wallet, Activity, Plus, Minus, Equal, TrendingDown, ShoppingCart, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ExtractStats } from "@/domain/extract";
 
 interface ExtractSummaryProps {
   previousBalance: number;
@@ -9,25 +10,27 @@ interface ExtractSummaryProps {
   finalBalance: number;
   accountName?: string;
   executiveMessage?: string;
+  stats?: ExtractStats;
 }
 
-const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+const fmt = (v: number) => 'R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
 
-export function ExtractSummary({ 
-  previousBalance, 
-  inflows, 
-  outflows, 
-  finalBalance, 
-  accountName, 
-  executiveMessage 
+export function ExtractSummary({
+  previousBalance,
+  inflows,
+  outflows,
+  finalBalance,
+  accountName,
+  executiveMessage,
+  stats
 }: ExtractSummaryProps) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      {/* Row 1: Equação de Fluxo */}
       <div className="flex flex-col lg:flex-row items-stretch gap-4">
-        {/* Equação de Fluxo */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-[3]">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3 flex-[3]">
           {/* Saldo Anterior */}
-          <Card className="p-5 bg-muted/5 border-muted/40 shadow-sm relative overflow-hidden group">
+          <Card className="p-5 bg-muted/5 border-muted/40 shadow-sm relative overflow-hidden group flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Saldo Anterior</p>
@@ -45,8 +48,13 @@ export function ExtractSummary({
             </div>
           </Card>
 
+          {/* + */}
+          <div className="hidden md:flex shrink-0 items-center justify-center text-muted-foreground/30">
+            <Plus className="w-5 h-5" />
+          </div>
+
           {/* Entradas */}
-          <Card className="p-5 bg-emerald-500/[0.02] border-emerald-500/10 shadow-sm relative overflow-hidden group">
+          <Card className="p-5 bg-emerald-500/[0.02] border-emerald-500/10 shadow-sm relative overflow-hidden group flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                  <div className="flex items-center gap-2">
@@ -60,15 +68,20 @@ export function ExtractSummary({
               <h3 className="text-xl font-bold text-emerald-600">
                 {fmt(inflows)}
               </h3>
-              <p className="text-[9px] text-muted-foreground">Total que entrou no caixa</p>
+              <p className="text-[9px] text-muted-foreground">Movimentos que aumentaram o caixa</p>
             </div>
             <div className="absolute -bottom-1 -right-1 opacity-5 group-hover:scale-110 transition-transform">
                <ArrowUpCircle className="w-16 h-16 text-emerald-500" />
             </div>
           </Card>
 
+          {/* - */}
+          <div className="hidden md:flex shrink-0 items-center justify-center text-muted-foreground/30">
+            <Minus className="w-5 h-5" />
+          </div>
+
           {/* Saídas */}
-          <Card className="p-5 bg-rose-500/[0.02] border-rose-500/10 shadow-sm relative overflow-hidden group">
+          <Card className="p-5 bg-rose-500/[0.02] border-rose-500/10 shadow-sm relative overflow-hidden group flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                  <div className="flex items-center gap-2">
@@ -82,7 +95,7 @@ export function ExtractSummary({
               <h3 className="text-xl font-bold text-rose-600">
                 {fmt(outflows)}
               </h3>
-              <p className="text-[9px] text-muted-foreground">Total que saiu do caixa</p>
+              <p className="text-[9px] text-muted-foreground">Movimentos que reduziram o caixa</p>
             </div>
             <div className="absolute -bottom-1 -right-1 opacity-5 group-hover:scale-110 transition-transform">
                <ArrowDownCircle className="w-16 h-16 text-rose-500" />
@@ -90,12 +103,12 @@ export function ExtractSummary({
           </Card>
         </div>
 
-        {/* Separador Visual de Igualdade (apenas desktop) */}
+        {/* Separador Visual */}
         <div className="hidden lg:flex items-center justify-center">
            <Equal className="w-5 h-5 text-muted-foreground/30" />
         </div>
 
-        {/* Saldo Final (Conclusão) */}
+        {/* Saldo Final */}
         <Card className={cn(
           "p-6 bg-primary shadow-lg ring-1 ring-primary/20 relative overflow-hidden group flex-1",
           "flex flex-col justify-center min-w-[240px]"
@@ -114,7 +127,6 @@ export function ExtractSummary({
               Posição {accountName ? `em ${accountName}` : 'Consolidada'} ao fim do período
             </p>
           </div>
-          {/* Decorativo */}
           <div className="absolute top-0 right-0 p-8 opacity-10 group-hover:rotate-12 transition-transform duration-500 translate-x-4 -translate-y-4">
              <Wallet className="w-24 h-24 text-white" />
           </div>
@@ -122,6 +134,68 @@ export function ExtractSummary({
         </Card>
       </div>
 
+      {/* Row 2: Marketplace KPIs (only if stats available) */}
+      {stats && (stats.totalSales > 0 || stats.totalFees > 0 || stats.totalPending > 0) && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {stats.totalSales > 0 && (
+            <Card className="p-4 bg-card border shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                  <ShoppingCart className="w-3.5 h-3.5 text-emerald-500" />
+                </div>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Vendas</span>
+              </div>
+              <div className="text-lg font-bold text-foreground">{stats.totalSales}</div>
+              {stats.grossSales > 0 && (
+                <p className="text-[9px] text-muted-foreground mt-0.5">Bruto: {fmt(stats.grossSales)}</p>
+              )}
+            </Card>
+          )}
+
+          {stats.totalFees > 0 && (
+            <Card className="p-4 bg-card border shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-rose-500/10">
+                  <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+                </div>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Taxas</span>
+              </div>
+              <div className="text-lg font-bold text-rose-600">{fmt(stats.totalFees)}</div>
+              {stats.feePercentage > 0 && (
+                <p className="text-[9px] text-muted-foreground mt-0.5">{stats.feePercentage.toFixed(1)}% das vendas</p>
+              )}
+            </Card>
+          )}
+
+          {stats.totalReserves > 0 && (
+            <Card className="p-4 bg-card border shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/10">
+                  <Clock className="w-3.5 h-3.5 text-amber-500" />
+                </div>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Reservas</span>
+              </div>
+              <div className="text-lg font-bold text-amber-600">{fmt(stats.totalReserves)}</div>
+              <p className="text-[9px] text-muted-foreground mt-0.5">Retido temporariamente</p>
+            </Card>
+          )}
+
+          {stats.totalPending > 0 && (
+            <Card className="p-4 bg-card border border-orange-200 shadow-sm">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 rounded-lg bg-orange-500/10">
+                  <span className="text-xs">⏳</span>
+                </div>
+                <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-wider">Pendentes</span>
+              </div>
+              <div className="text-lg font-bold text-orange-600">{stats.totalPending}</div>
+              <p className="text-[9px] text-muted-foreground mt-0.5">Aguardando classificação</p>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Row 3: Executive Message */}
       {executiveMessage && (
         <div className="bg-primary/5 border border-primary/10 rounded-xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-500 relative overflow-hidden group">
           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20">

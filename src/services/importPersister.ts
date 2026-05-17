@@ -55,13 +55,17 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
     try {
        // --- CASO 1: CONCILIAÇÃO (Vínculo com Título Existente) ---
        if (event.reconciliationId && event.reconciliationType === 'match') {
-          await supabaseFinanceService.settleTitle(
-             event.reconciliationId,
-             defaultAccount.id,
-             event.date.split('T')[0],
-             Math.abs(event.netAmount),
-             `Conciliado automaticamente via importação (${source})${event.matchConfidence ? ` [Match: ${event.matchConfidence}]` : ''}`
-          );
+          if (event.settlementStatus === 'settled') {
+             await supabaseFinanceService.settleTitle(
+                event.reconciliationId,
+                defaultAccount.id,
+                event.date.split('T')[0],
+                Math.abs(event.netAmount),
+                `Conciliado automaticamente via importação (${source})${event.matchConfidence ? ` [Match: ${event.matchConfidence}]` : ''}`
+             );
+          }
+          // Se for 'predicted', apenas ignoramos para não duplicar (mantém previsto)
+          // Se for 'review', também não baixamos automaticamente até ação manual.
           persistCount++;
           continue; // Pula para o próximo evento — NÃO cria novo documento
        }
@@ -77,7 +81,10 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
 
        // Regra de Ouro: Tipos "Liquidados" nascem pagos e sem data futura
        const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType);
-       const payNow = event.historical || isLiquidation;
+       let payNow = event.historical || isLiquidation || event.settlementStatus === 'settled';
+       if (event.settlementStatus === 'review') {
+          payNow = false;
+       }
        const finalDueDate = payNow ? competence : dueDate;
 
        const isDespesa = event.netAmount < 0;

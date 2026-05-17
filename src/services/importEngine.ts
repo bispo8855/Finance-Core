@@ -99,7 +99,7 @@ export async function processImportFile(
     return -1;
   };
 
-  let colDate = -1, colNet = -1, colGross = -1, colDesc = -1, colRef = -1, colProduct = -1;
+  let colDate = -1, colNet = -1, colGross = -1, colDesc = -1, colRef = -1, colProduct = -1, colStatus = -1, colReleaseDate = -1;
 
   if (source === 'Mercado Livre' && mode === 'sales') {
     // Mapeamento explícito exigido para Mercado Livre (Sales)
@@ -129,6 +129,9 @@ export async function processImportFile(
     colDesc = findBestCol(['descricao', 'descrição', 'description', 'tipo', 'transaction_type', 'titulo do anuncio', 'descricao da operacao', 'type', 'produto', 'titulo', 'nome', 'detalhe', 'operacao', 'descri']);
     colRef = findBestCol(['n.º do pacote', 'id do pacote', 'pacote', 'reference_id', 'n.º de venda', 'numero de venda', 'id do pedido', 'pedido', 'order', 'transacao', 'referencia', 'external_id', 'codigo', 'order_id']);
     if (colRef === -1) colRef = headers.findIndex(h => h === 'id');
+    
+    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao']);
+    colReleaseDate = findBestCol(['data de liberacao', 'data de liquidação', 'release date', 'payout date', 'data de repasse', 'data de liberação', 'data de liquidação', 'liberação do dinheiro', 'liberacao do dinheiro', 'data de disponibilidade', 'disponivel em']);
   }
 
   // Prioridade: Líquido > Bruto
@@ -215,6 +218,26 @@ export async function processImportFile(
       detectedType = 'entrada_liquidada';
     }
 
+    const rawStatus = colStatus !== -1 && row[colStatus] ? String(row[colStatus]) : '';
+    const releaseDateStrRaw = colReleaseDate !== -1 && row[colReleaseDate] ? String(row[colReleaseDate]) : '';
+    
+    let hasReleaseDate = false;
+    let isReleaseFuture = false;
+    if (releaseDateStrRaw && releaseDateStrRaw.trim() !== '') {
+       const relD = new Date(parseDateString(releaseDateStrRaw, dateFormat));
+       if (!isNaN(relD.getTime())) {
+          hasReleaseDate = true;
+          // Ignorar hora para comparar apenas a data
+          const today = new Date();
+          today.setHours(0,0,0,0);
+          const relDateOnly = new Date(relD);
+          relDateOnly.setHours(0,0,0,0);
+          if (relDateOnly > today) isReleaseFuture = true;
+       }
+    }
+
+    const settlementInfo = inferSettlementLineStatus(desc, rawStatus, detectedType, amount, hasReleaseDate, isReleaseFuture);
+
     parsedLines.push({
       id: primaryLineId,
       rawData: row,
@@ -222,7 +245,10 @@ export async function processImportFile(
       date: dateStr,
       description: desc,
       reference: ref,
-      detectedType
+      detectedType,
+      settlementStatus: settlementInfo.status,
+      settlementConfidence: settlementInfo.confidence,
+      settlementReason: settlementInfo.reason
     });
 
     // --- REGRA DE EXCLUSIVIDADE ---
@@ -255,7 +281,12 @@ export async function processImportFile(
                 date: dateStr,
                 description: h.charAt(0).toUpperCase() + h.slice(1).replace(' (brl)', ''),
                 reference: ref,
-                detectedType
+                detectedType,
+                // Sublinhas herdam status da linha pai para manter consistência, 
+                // mas a decisão do evento ignora elas na heurística principal
+                settlementStatus: settlementInfo.status,
+                settlementConfidence: settlementInfo.confidence,
+                settlementReason: 'Sublinha herdou status principal.'
              });
           }
        }
@@ -439,6 +470,64 @@ function inferLineType(description: string, amount: number, mode: ImportMode): I
   return 'taxa'; 
 }
 
+function inferSettlementLineStatus(
+  desc: string,
+  rawStatus: string,
+  detectedType: ImportRawLine['detectedType'],
+  amount: number,
+  hasReleaseDate: boolean,
+  isReleaseFuture: boolean
+): { status: 'predicted' | 'settled' | 'review', confidence: number, reason: string } {
+  const d = desc.toLowerCase();
+  const s = rawStatus.toLowerCase();
+  const combined = `${d} ${s}`;
+
+  const keywords = [
+    'recebido', 'recebimento', 'liquidado', 'baixado', 'liberado', 'liberação', 'liberacao', 
+    'repasse', 'creditado', 'crédito', 'credito', 'disponível', 'disponivel', 'saldo disponível', 
+    'saldo disponivel', 'valor disponível', 'valor disponivel', 'dinheiro disponível', 
+    'dinheiro disponivel', 'pagamento recebido', 'pagamento aprovado', 'pagamento concluído', 
+    'pagamento concluido', 'concluído', 'concluido', 'aprovado', 'compensado', 'transferido', 
+    'transferência', 'transferencia', 'saque', 'retirada', 'valor liberado', 'dinheiro liberado',
+    'paid', 'settled', 'released', 'payout', 'settlement', 'available', 'credited', 'completed', 
+    'approved', 'transferred', 'withdrawal', 'received', 'liquidated'
+  ];
+
+  const hasKeyword = keywords.some(k => combined.includes(k));
+  
+  let hasPago = false;
+  if (combined.includes('pago')) {
+    if (['taxa', 'frete', 'desconhecido'].includes(detectedType) || amount < 0) {
+       // Ignorar "pago" para custos
+    } else {
+       hasPago = true;
+    }
+  }
+
+  const isIndicatingSettlement = hasKeyword || hasPago;
+  
+  if (['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(detectedType)) {
+     if (hasReleaseDate && isReleaseFuture) {
+        return { status: 'review', confidence: 0.6, reason: 'Tipo de liquidação detectado, mas a data de liberação informada é futura.' };
+     }
+     return { status: 'settled', confidence: 0.9, reason: 'O tipo detectado indica liquidação financeira (repasse/transferência).' };
+  }
+
+  if (isIndicatingSettlement && (!hasReleaseDate || !isReleaseFuture)) {
+     return { status: 'settled', confidence: 0.8, reason: 'O status ou descrição original indicam que o valor já foi liquidado.' };
+  }
+
+  if (isIndicatingSettlement && hasReleaseDate && isReleaseFuture) {
+     return { status: 'review', confidence: 0.7, reason: 'Status indica liquidação, mas a data de liberação apontada é futura (Sinais conflitantes).' };
+  }
+
+  if (!isIndicatingSettlement && hasReleaseDate && isReleaseFuture) {
+     return { status: 'predicted', confidence: 0.9, reason: 'Existe data de liberação projetada no futuro.' };
+  }
+
+  return { status: 'predicted', confidence: 0.5, reason: 'Nenhum indicativo claro de liquidação. Mantido como recebível futuro.' };
+}
+
 function groupLinesIntoEvents(lines: ImportRawLine[], source: ImportSource, mode: ImportMode, valueSource?: ImportEvent['valueSource']): ImportEvent[] {
   const refMap = new Map<string, ImportRawLine[]>();
   const orphaned: ImportRawLine[] = [];
@@ -583,6 +672,27 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     finalPrimaryType = mode === 'bank' ? 'outros' : 'venda';
   }
 
+  // Settlement Status Consolidation
+  let eventSettlementStatus: 'predicted' | 'settled' | 'review' = 'predicted';
+  let eventSettlementReason = 'Padrão assumido (Previsto).';
+  let eventSettlementConfidence = 0.5;
+
+  if (primaryLine.settlementStatus) {
+     eventSettlementStatus = primaryLine.settlementStatus;
+     eventSettlementReason = primaryLine.settlementReason || '';
+     eventSettlementConfidence = primaryLine.settlementConfidence || 0.5;
+  }
+  
+  // Rule 5: Don't assume settled just because a fee line is settled.
+  // Above we already use the primaryLine, which is the main venta/repasse.
+  if (['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(finalPrimaryType)) {
+     if (eventSettlementStatus === 'predicted') {
+        eventSettlementStatus = 'settled';
+        eventSettlementReason = 'Sobrescrito para Liquidado porque o tipo final primário indica movimentação de caixa.';
+        eventSettlementConfidence = 0.9;
+     }
+  }
+
   return {
     id: generateId(),
     source,
@@ -601,6 +711,9 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     historical,
     primaryType: finalPrimaryType,
     reference: lines.find(l => l.reference)?.reference,
-    classificationStatus
+    classificationStatus,
+    settlementStatus: eventSettlementStatus,
+    settlementReason: eventSettlementReason,
+    settlementConfidence: eventSettlementConfidence
   };
 }
