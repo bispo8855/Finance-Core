@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { FileSpreadsheet, ArrowLeft, Upload, Loader2, CheckCircle2 } from 'lucide-react';
 import { ImportBatch, ImportSource, ImportMode } from '@/types/import';
 import { processImportFile } from '@/services/importEngine';
+import { conciliateBatch, ConciliationStats } from '@/services/conciliationService';
 import ImportUploadStep from '@/components/import/ImportUploadStep';
 import ImportLoadingStep from '@/components/import/ImportLoadingStep';
 import ImportReviewDashboard from '@/components/import/ImportReviewDashboard';
@@ -15,7 +16,7 @@ type ImportStep = 'upload' | 'loading' | 'review' | 'success';
 export default function ImportPage() {
   const [step, setStep] = useState<ImportStep>('upload');
   const [batch, setBatch] = useState<ImportBatch | null>(null);
-  const [loadingStage, setLoadingStage] = useState<'reading' | 'interpreting' | 'grouping'>('reading');
+  const [loadingStage, setLoadingStage] = useState<'reading' | 'interpreting' | 'grouping' | 'conciliating'>('reading');
   const [importedCount, setImportedCount] = useState(0);
 
   const handleUpload = async (file: File, source: ImportSource, mode: ImportMode) => {
@@ -42,143 +43,24 @@ export default function ImportPage() {
         });
       }
       
-      // 5. Motor de Conciliação e Duplicidade
+      // 5. Motor de Conciliação (agora via conciliationService)
+      setLoadingStage('conciliating');
+      await new Promise(r => setTimeout(r, 400));
+
       try {
         const snapshot = await supabaseFinanceService.getSnapshot();
-        const pendingTitles = snapshot.titles.filter(t => t.status === 'previsto' && (t.side === 'receber' || t.side === 'pagar'));
-        const existingDescriptions = new Set(snapshot.documents.map(d => d.description));
+        const { events: conciliatedEvents, stats } = conciliateBatch(newBatch.events, snapshot);
         
-        for (const event of newBatch.events) {
-          // A. Verificação de Duplicidade (Cross-Reference)
-          if (existingDescriptions.has(event.title)) {
-            event.flags = [...(event.flags || []), 'duplicate'];
-            event.status = 'pendente';
-            event.confidence = 'revisar';
-          }
+        newBatch.events = conciliatedEvents;
 
-          // B. Verificação de Conciliação Inteligente
-          // Prioridade 1: Match por Referência (ORDER_ID)
-          let matchFound = false;
-          if (event.reference && (mode === 'bank' || (mode === 'sales' && ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType)))) {
-            const refCandidates = pendingTitles.filter(t => {
-              const doc = snapshot.documents.find(d => d.id === t.documentId);
-              if (!doc) return false;
-              
-              const ref = event.reference!;
-              // 1. Busca por reference_id estruturado (nova implementação)
-              if (doc.referenceId && doc.referenceId === ref) return true;
-              
-              // 2. Busca pelo padrão formatado do ImportPersister [#ID]
-              const docDesc = doc.description || '';
-              if (docDesc.includes(`[#${ref}]`)) return true;
-              
-              // 3. Busca por fallback de descrição antiga: "2000012293036909\nProduto"
-              return ref.length > 5 && docDesc.includes(ref);
-            });
-            
-            if (refCandidates.length === 1) {
-              event.reconciliationId = refCandidates[0].id;
-              event.reconciliationType = 'match';
-              event.confidence = 'alta';
-              event.explanation = (event.explanation || '') + ' | Conciliado via ID do pedido.';
-              matchFound = true;
-            } else if (refCandidates.length > 1) {
-              event.reconciliationType = 'multiple';
-              event.confidence = 'revisar';
-              event.explanation = (event.explanation || '') + ` | Conflito: múltiplos lançamentos com o mesmo ID (${event.reference}).`;
-              matchFound = true; // Impede o fallback para evitar match errado
-            }
-          }
-
-          // Prioridade 2: Fallback por Valor + Data (apenas se não houver match por ID)
-          if (!matchFound && mode !== 'generic') {
-            const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao'].includes(event.primaryType);
-            const shouldConciliate = mode === 'bank' || (mode === 'sales' && isLiquidation);
-            
-            if (shouldConciliate) {
-              const eventValue = Math.abs(event.netAmount);
-              const eventDate = new Date(event.date);
-              const dayMargin = mode === 'bank' ? 3 : 7;
-              
-              const valCandidates = pendingTitles.filter(t => {
-                const sameValue = Math.abs(t.value - eventValue) < 0.01;
-                const tDate = new Date(t.dueDate);
-                const diffDays = Math.abs(tDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
-                return sameValue && diffDays <= dayMargin;
-              });
-
-              // Prepara candidatos amplos (±15% do valor e ±7 dias) para sugestão na tela
-              event.reconciliationCandidates = pendingTitles.filter(t => {
-                const tDate = new Date(t.dueDate);
-                const diffDays = Math.abs(tDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
-                if (diffDays > 7) return false;
-                const diffPct = Math.abs(t.value - eventValue) / t.value;
-                return diffPct <= 0.15 || Math.abs(t.value - eventValue) < 0.01;
-              }).map(t => ({
-                id: t.id,
-                description: t.description || snapshot.documents.find(d => d.id === t.documentId)?.description || 'Título',
-                value: t.value,
-                date: t.dueDate
-              }));
-
-              if (valCandidates.length === 1) {
-                event.reconciliationId = valCandidates[0].id;
-                event.reconciliationType = 'match';
-                if (mode === 'bank' || event.primaryType === 'entrada_liquidada') {
-                  event.confidence = 'media';
-                  event.explanation = (event.explanation || '') + ' | ℹ️ Correspondência sugerida por Valor + Data próxima. Confirme a conciliação.';
-                }
-              } else if (valCandidates.length > 1) {
-                event.reconciliationType = 'multiple';
-                event.confidence = 'revisar';
-              } else {
-                event.reconciliationType = 'none';
-                if (mode === 'bank' || event.primaryType === 'entrada_liquidada') {
-                  if (event.primaryType === 'entrada_liquidada') {
-                    if (event.reference) {
-                       event.confidence = 'revisar';
-                       event.explanation = (event.explanation || '') + ' | ⚠️ Referência encontrada, mas nenhuma venda correspondente foi localizada. Alta prioridade.';
-                    } else {
-                       const closeCandidates = event.reconciliationCandidates.filter(c => {
-                          const diffPct = Math.abs(c.value - eventValue) / Math.max(c.value, 1);
-                          return diffPct <= 0.05 && diffPct > 0.001;
-                       });
-                       const recurrentCount = newBatch.events.filter(e => Math.abs(Math.abs(e.netAmount) - eventValue) < 0.01).length;
-
-                       if (closeCandidates.length > 0) {
-                          event.reconciliationType = 'divergence';
-                          event.confidence = 'revisar';
-                          event.explanation = (event.explanation || '') + ' | ⚠️ Possível divergência de valor.';
-                       } else if (recurrentCount > 1) {
-                          event.confidence = 'alta';
-                          event.status = 'aprovado';
-                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (Recorrente). Auto-aprovado.';
-                       } else if (eventValue < 100) {
-                          event.confidence = 'alta';
-                          event.status = 'aprovado';
-                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (< 100). Auto-aprovado.';
-                       } else {
-                          // Valor >= 100
-                          event.confidence = 'revisar';
-                          event.explanation = (event.explanation || '') + ' | ℹ️ Entrada avulsa detectada (Isolada >= 100). Requer revisão.';
-                       }
-                    }
-                  } else {
-                    event.confidence = 'revisar';
-                    event.explanation = (event.explanation || '') + ' | ⚠️ Sem venda correspondente encontrada. Revise antes de importar.';
-                  }
-                }
-              }
-            }
-          }
-          
-          if (mode === 'generic') event.confidence = 'revisar';
-        }
+        // Feedback visual sobre resultados da conciliação
+        showConciliationFeedback(stats);
+        
       } catch (err) {
         console.warn("Não foi possível realizar a conciliação automática", err);
       }
 
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 300));
       
       setBatch(newBatch);
       setStep('review');
@@ -245,3 +127,37 @@ export default function ImportPage() {
     </div>
   );
 }
+
+/**
+ * Exibe toasts com feedback visual sobre o resultado da conciliação
+ */
+function showConciliationFeedback(stats: ConciliationStats) {
+  if (stats.strong > 0) {
+    toast.success(`✨ ${stats.strong} recebimento(s) conciliado(s) automaticamente`, {
+      description: 'Vendas previstas serão liquidadas ao importar.',
+      duration: 6000
+    });
+  }
+
+  if (stats.medium > 0) {
+    toast.info(`🔍 ${stats.medium} sugestão(ões) de conciliação encontrada(s)`, {
+      description: 'Revise e confirme as correspondências sugeridas.',
+      duration: 5000
+    });
+  }
+
+  if (stats.pendingClassification > 0) {
+    toast.warning(`⏳ ${stats.pendingClassification} movimentação(ões) pendente(s) de classificação`, {
+      description: 'Classifique essas movimentações antes de aprovar para evitar impacto no DRE.',
+      duration: 6000
+    });
+  }
+
+  if (stats.duplicates > 0) {
+    toast.warning(`⚠️ ${stats.duplicates} possível(is) duplicidade(s) detectada(s)`, {
+      description: 'Verifique os eventos sinalizados antes de aprovar.',
+      duration: 5000
+    });
+  }
+}
+

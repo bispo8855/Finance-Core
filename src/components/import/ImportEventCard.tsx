@@ -27,6 +27,9 @@ interface ImportEventCardProps {
 export default function ImportEventCard({ event, onStatusChange, onUpdateCategory, onUpdateEvent }: ImportEventCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [showMatchModal, setShowMatchModal] = useState(false);
+  const [selectedClassification, setSelectedClassification] = useState<string | null>(null);
+  
+  const isPendingClassification = event.classificationStatus === 'pending_review';
   
   // Confidences mapping
   const confidenceConfig = {
@@ -90,9 +93,27 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                 </Badge>
               )}
 
-              {event.reconciliationType === 'match' && (
+              {event.reconciliationType === 'match' && event.matchConfidence === 'strong' && (
+                <Badge variant="secondary" className="ml-2 border border-emerald-200 bg-emerald-50 text-emerald-700 font-medium text-[10px] uppercase">
+                  ✨ Conciliação Automática {event.reference ? `— Pedido #${event.reference}` : ''}
+                </Badge>
+              )}
+
+              {event.reconciliationType === 'match' && event.matchConfidence === 'medium' && (
+                <Badge variant="secondary" className="ml-2 border border-blue-200 bg-blue-50 text-blue-700 font-medium text-[10px] uppercase">
+                  🔍 Sugestão de Conciliação
+                </Badge>
+              )}
+
+              {event.reconciliationType === 'match' && (!event.matchConfidence || !['strong', 'medium'].includes(event.matchConfidence)) && (
                 <Badge variant="secondary" className="ml-2 border border-emerald-200 bg-emerald-50 text-emerald-700 font-medium text-[10px] uppercase">
                   ✨ Conciliação Sugerida
+                </Badge>
+              )}
+
+              {isPendingClassification && (
+                <Badge variant="secondary" className="ml-2 border border-orange-200 bg-orange-100 text-orange-800 font-medium text-[10px] uppercase animate-pulse">
+                  ⏳ Pendente de Classificação
                 </Badge>
               )}
 
@@ -159,7 +180,13 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                 <Button size="sm" variant="outline" className="text-slate-500 hover:text-red-600" onClick={handleIgnore}>
                   <X className="w-4 h-4 mr-1" /> Ignorar
                 </Button>
-                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={handleApprove}>
+                <Button 
+                  size="sm" 
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white" 
+                  onClick={handleApprove}
+                  disabled={isPendingClassification && !selectedClassification}
+                  title={isPendingClassification && !selectedClassification ? 'Classifique a movimentação antes de aprovar' : ''}
+                >
                   <Check className="w-4 h-4 mr-1" /> Aprovar
                 </Button>
               </>
@@ -236,7 +263,7 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                 </div>
               )}
 
-              {event.status !== 'aprovado' && event.status !== 'ignorado' && event.confidence === 'revisar' && event.primaryType === 'entrada_liquidada' && (
+              {event.status !== 'aprovado' && event.status !== 'ignorado' && event.confidence === 'revisar' && event.primaryType === 'entrada_liquidada' && !isPendingClassification && (
                 <div className="mt-4 border border-violet-200 bg-violet-50/50 rounded-md p-3">
                   <h6 className="text-xs font-bold text-violet-900 uppercase tracking-tight flex items-center gap-1.5 mb-2">
                     <Search className="w-3.5 h-3.5" /> Ação Recomendada
@@ -281,6 +308,109 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                       </div>
                     </>
                   )}
+                </div>
+              )}
+
+              {/* PAINEL DE CLASSIFICAÇÃO RÁPIDA */}
+              {event.status !== 'aprovado' && event.status !== 'ignorado' && isPendingClassification && (
+                <div className="mt-4 border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-4">
+                  <h6 className="text-xs font-bold text-orange-900 uppercase tracking-tight flex items-center gap-1.5 mb-3">
+                    <span className="text-base">⏳</span> Classificar Movimentação
+                  </h6>
+                  <p className="text-xs text-orange-800 mb-4 leading-relaxed">
+                    Esta movimentação foi importada com um tipo ambíguo (<code className="bg-orange-200/50 px-1 py-0.5 rounded text-[10px]">{event.rawLines[0]?.description || 'desconhecido'}</code>).
+                    Selecione a classificação correta antes de aprovar.
+                  </p>
+                  
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: 'taxa_marketplace', label: '💳 Taxa Marketplace', desc: 'Comissão, tarifa de venda' },
+                      { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado' },
+                      { id: 'ajuste', label: '🔄 Ajuste / Compensação', desc: 'Correção, estorno parcial' },
+                      { id: 'despesa', label: '📉 Despesa Operacional', desc: 'Custo, investimento' },
+                      { id: 'receita', label: '📈 Receita', desc: 'Entrada positiva' },
+                      { id: 'outro', label: '📋 Outro', desc: 'Classificar depois' },
+                    ].map(opt => (
+                      <button
+                        key={opt.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedClassification(opt.id);
+                          if (onUpdateEvent) {
+                            onUpdateEvent(event.id, {
+                              classificationStatus: 'classified',
+                              primaryType: opt.id === 'taxa_marketplace' ? 'outros' 
+                                : opt.id === 'retencao' ? 'outros'
+                                : opt.id === 'ajuste' ? 'outros'
+                                : opt.id === 'despesa' ? 'outros'
+                                : opt.id === 'receita' ? 'venda'
+                                : 'outros',
+                              explanation: (event.explanation || '') + ` | ✅ Classificado manualmente como: ${opt.label}`,
+                              confidence: 'alta'
+                            });
+                          }
+                        }}
+                        className={cn(
+                          "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left",
+                          selectedClassification === opt.id
+                            ? "border-orange-500 bg-orange-100 shadow-sm"
+                            : "border-orange-100 bg-white hover:border-orange-300 hover:shadow-sm"
+                        )}
+                      >
+                        <span className="text-xs font-bold text-slate-800">{opt.label}</span>
+                        <span className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                  
+                  {selectedClassification && (
+                    <div className="mt-3 flex gap-2">
+                      <Button
+                        size="sm"
+                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onStatusChange(event.id, 'aprovado');
+                        }}
+                      >
+                        <Check className="w-3.5 h-3.5 mr-1" /> Classificar e Aprovar
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onStatusChange(event.id, 'ignorado');
+                        }}
+                      >
+                        Ignorar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Conciliação automática - feedback positivo */}
+              {event.reconciliationType === 'match' && event.matchConfidence === 'strong' && event.status !== 'ignorado' && (
+                <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <span className="text-base">✨</span> Conciliação Automática
+                  </p>
+                  <p className="text-[11px] text-emerald-700 mt-1">
+                    Pedido {event.reference ? `#${event.reference}` : ''} localizado no sistema. Ao importar, o título previsto será liquidado automaticamente — sem criar duplicidade.
+                  </p>
+                </div>
+              )}
+
+              {event.reconciliationType === 'match' && event.matchConfidence === 'medium' && event.status !== 'ignorado' && (
+                <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-blue-800 flex items-center gap-1.5">
+                    <span className="text-base">🔍</span> Sugestão de Conciliação
+                  </p>
+                  <p className="text-[11px] text-blue-700 mt-1">
+                    Correspondência encontrada por valor e data próxima. Confirme se deseja vincular a este lançamento existente.
+                  </p>
                 </div>
               )}
             </div>
@@ -372,9 +502,10 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                             line.detectedType === 'venda' && "bg-emerald-50 text-emerald-700 border-emerald-200",
                             line.detectedType === 'taxa' && "bg-red-50 text-red-700 border-red-200",
                             line.detectedType === 'frete' && "bg-orange-50 text-orange-700 border-orange-200",
+                            line.detectedType === 'pendente_classificacao' && "bg-amber-50 text-amber-700 border-amber-300 animate-pulse",
                             line.detectedType === 'desconhecido' && "bg-slate-100 text-slate-700 border-slate-300"
                           )}>
-                            {line.detectedType.toUpperCase()}
+                            {line.detectedType === 'pendente_classificacao' ? '⏳ PENDENTE' : line.detectedType.toUpperCase()}
                           </Badge>
                         </td>
                         <td className={cn("py-2 px-3 text-right font-medium whitespace-nowrap", line.amount >= 0 ? "text-emerald-600" : "text-red-600")}>

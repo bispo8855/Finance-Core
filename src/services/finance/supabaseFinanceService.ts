@@ -96,7 +96,9 @@ export class SupabaseFinanceService implements IFinanceService {
         gross_amount: payload.grossAmount,
         marketplace_fee: payload.marketplaceFee,
         shipping_cost: payload.shippingCost,
-        reference_id: payload.referenceId
+        reference_id: payload.referenceId,
+        source_type: payload.sourceType || null,
+        import_batch_id: payload.importBatchId || null
       })
       .select()
       .single();
@@ -763,7 +765,9 @@ export class SupabaseFinanceService implements IFinanceService {
       grossAmount: row.gross_amount ? Number(row.gross_amount) : undefined,
       marketplaceFee: row.marketplace_fee ? Number(row.marketplace_fee) : undefined,
       shippingCost: row.shipping_cost ? Number(row.shipping_cost) : undefined,
-      referenceId: row.reference_id || undefined
+      referenceId: row.reference_id || undefined,
+      sourceType: row.source_type || undefined,
+      importBatchId: row.import_batch_id || undefined
     };
   }
 
@@ -799,6 +803,35 @@ export class SupabaseFinanceService implements IFinanceService {
       notes: row.notes || '',
       type: titleSide === 'receber' ? 'entrada' : 'saida',
     };
+  }
+
+  async reclassifyDocument(documentId: string, categoryId: string, newDescription?: string): Promise<FinancialDocument> {
+    console.log("SUPABASE SERVICE ATIVO - reclassifyDocument");
+    const userId = await this.getUserId();
+
+    // 1. Update the document's category (and optionally description)
+    const updateData: Record<string, unknown> = {
+      category_id: categoryId
+    };
+    if (newDescription !== undefined) {
+      // Remove the pending classification prefix if present
+      updateData.description = newDescription.replace(/^\[⏳ Pendente de Classificação\]\s*/, '');
+    }
+
+    const { data: doc, error: docError } = await supabase
+      .from('documents')
+      .update(updateData)
+      .eq('id', documentId)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (docError) {
+      console.error('Erro ao reclassificar documento:', docError);
+      throw new Error(`Erro ao reclassificar: ${docError.message}`);
+    }
+
+    return this.mapDocument(doc);
   }
 }
 

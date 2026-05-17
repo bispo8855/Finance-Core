@@ -5,10 +5,13 @@ export type ImportEventStatus = 'aprovado' | 'ignorado' | 'pendente';
 
 export type ImportSource = 'Mercado Livre' | 'Mercado Pago' | 'Shopee' | 'Shopify' | 'Gateway' | 'Outro';
 
+export type ClassificationStatus = 'classified' | 'pending_review' | 'ambiguous';
+export type MatchConfidence = 'strong' | 'medium' | 'weak' | 'none';
+
 export interface ImportRawLine {
   id: string; // uuid local
   rawData: unknown; // O objeto JSON original da linha da planilha
-  detectedType: 'venda' | 'taxa' | 'frete' | 'repasse' | 'antecipacao' | 'estorno' | 'chargeback' | 'ajuste' | 'transferencia' | 'desconhecido';
+  detectedType: 'venda' | 'taxa' | 'frete' | 'repasse' | 'antecipacao' | 'estorno' | 'chargeback' | 'ajuste' | 'transferencia' | 'liberacao' | 'deposito' | 'entrada_liquidada' | 'pendente_classificacao' | 'desconhecido';
   amount: number;
   date: string; // ISO string
   reference?: string; // ID do pedido ou transação na origem
@@ -38,7 +41,7 @@ export interface ImportEvent {
   // Explicação sobre por que esse evento foi agrupado
   explanation?: string;
   // Natureza financeira
-  primaryType: 'venda' | 'repasse' | 'liberacao' | 'transferencia' | 'deposito' | 'antecipacao' | 'entrada_liquidada' | 'recebivel_futuro' | 'pedido' | 'outros';
+  primaryType: 'venda' | 'repasse' | 'liberacao' | 'transferencia' | 'deposito' | 'antecipacao' | 'entrada_liquidada' | 'recebivel_futuro' | 'pedido' | 'pendente_classificacao' | 'outros';
   // Referência do pedido/transação (normalizada)
   reference?: string;
   // New fields for Reconciliation
@@ -54,6 +57,9 @@ export interface ImportEvent {
   }[];
   // Traceability
   valueSource?: 'net_column' | 'calculated' | 'single_amount';
+  // Classification & Conciliation
+  classificationStatus?: ClassificationStatus;
+  matchConfidence?: MatchConfidence;
 }
 
 export interface ImportBatch {

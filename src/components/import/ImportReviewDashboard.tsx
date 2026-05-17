@@ -34,6 +34,7 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
     if (filter === 'pendentes') return events.filter(e => e.status === 'pendente');
     if (filter === 'aprovados') return events.filter(e => e.status === 'aprovado');
     if (filter === 'revisar') return events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto' || e.confidence === 'media');
+    if (filter === 'classificar') return events.filter(e => e.classificationStatus === 'pending_review');
     return events;
   }, [events, filter]);
 
@@ -43,8 +44,10 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
     const ignorados = events.filter(e => e.status === 'ignorado').length;
     const pendentes = events.filter(e => e.status === 'pendente').length;
     const revisar = events.filter(e => e.confidence === 'revisar' || e.confidence === 'incompleto' || e.confidence === 'media').length;
+    const pendingClassification = events.filter(e => e.classificationStatus === 'pending_review').length;
+    const conciliated = events.filter(e => e.reconciliationType === 'match').length;
     
-    return { total, aprovados, ignorados, pendentes, revisar };
+    return { total, aprovados, ignorados, pendentes, revisar, pendingClassification, conciliated };
   }, [events]);
 
   const handleImportAllApproved = async () => {
@@ -56,7 +59,7 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
 
     try {
       setIsPersisting(true);
-      await persistApprovedEvents(approvedEvents, batch.source);
+      await persistApprovedEvents(approvedEvents, batch.source, batch.id);
       toast.success(`${approvedEvents.length} eventos registrados!`);
       onImportSuccess(approvedEvents.length);
     } catch (error) {
@@ -68,8 +71,8 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
 
   const handleApproveAllAltaConfianca = () => {
     setEvents(prev => prev.map(ev => {
-      // Se for alta confiança e estiver pendente, aprova
-      if (ev.confidence === 'alta' && ev.status === 'pendente') {
+      // Se for alta confiança, estiver pendente, E não for pendente de classificação, aprova
+      if (ev.confidence === 'alta' && ev.status === 'pendente' && ev.classificationStatus !== 'pending_review') {
         return { ...ev, status: 'aprovado' };
       }
       return ev;
@@ -119,6 +122,30 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
             </div>
           </CardContent>
         </Card>
+
+        {stats.pendingClassification > 0 && (
+          <Card className="md:col-span-4 bg-amber-50 border border-amber-200">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className="w-10 h-10 bg-amber-100 rounded-full flex items-center justify-center shrink-0">
+                <span className="text-lg">⏳</span>
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-amber-900">
+                  {stats.pendingClassification} movimentação(ões) pendente(s) de classificação
+                </p>
+                <p className="text-xs text-amber-700 mt-0.5">
+                  Classifique essas movimentações antes de aprovar para evitar impacto incorreto no DRE.
+                </p>
+              </div>
+              <button
+                onClick={() => setFilter('classificar')}
+                className="px-3 py-1.5 rounded-md text-xs font-medium bg-amber-200 text-amber-800 hover:bg-amber-300 transition-colors"
+              >
+                Filtrar Pendentes
+              </button>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 py-2">
@@ -128,6 +155,9 @@ export default function ImportReviewDashboard({ batch, onReset, onImportSuccess 
             <ToggleGroupItem value="todos" className="data-[state=on]:bg-slate-200">Todos</ToggleGroupItem>
             <ToggleGroupItem value="pendentes" className="data-[state=on]:bg-blue-100 data-[state=on]:text-blue-800">Pendentes</ToggleGroupItem>
             <ToggleGroupItem value="revisar" className="data-[state=on]:bg-amber-100 data-[state=on]:text-amber-800">Revisar</ToggleGroupItem>
+            {stats.pendingClassification > 0 && (
+              <ToggleGroupItem value="classificar" className="data-[state=on]:bg-orange-100 data-[state=on]:text-orange-800">⏳ Classificar</ToggleGroupItem>
+            )}
             <ToggleGroupItem value="aprovados" className="data-[state=on]:bg-emerald-100 data-[state=on]:text-emerald-800">Aprovados</ToggleGroupItem>
           </ToggleGroup>
         </div>

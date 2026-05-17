@@ -380,33 +380,62 @@ function parseDateString(rDate: string, format: 'DMY' | 'MDY'): string {
   return new Date().toISOString();
 }
 
+// Lista de termos que indicam movimentações ambíguas de marketplace
+// Essas NÃO devem ser auto-categorizadas como taxa/deposito/receita
+const AMBIGUOUS_TERMS = [
+  'reserve_for_payout', 'balance_reserve', 'withholding',
+  'adjustment', 'unknown_fee', 'reserve', 'blocked_amount',
+  'reserva', 'retenção', 'retencao', 'bloqueio', 'compensação',
+  'compensacao', 'saldo reservado', 'retencion', 'mediacion',
+  'mediation', 'dispute', 'hold', 'pending', 'frozen',
+  'congelado', 'ajuste', 'regularização', 'regularizacao'
+];
+
 function inferLineType(description: string, amount: number, mode: ImportMode): ImportRawLine['detectedType'] {
   const desc = description.toLowerCase();
   
+  // 1. Tipos claros e explícitos (alta confiança)
   if (desc.includes('frete') || desc.includes('envio') || desc.includes('shipping')) return 'frete';
-  if (desc.includes('comissão') || desc.includes('taxa') || desc.includes('tarif') || desc.includes('fee')) return 'taxa';
   
-  // Natures Liquidadas
-  const isLiquidation = desc.includes('liberação') || desc.includes('liberacao') || 
-                        desc.includes('repasse') || desc.includes('transferência') || desc.includes('transferencia') ||
-                        desc.includes('depósito') || desc.includes('deposito') || desc.includes('crédito') || desc.includes('credito') ||
-                        desc.includes('payout') || desc.includes('liquidação') || desc.includes('liquidacao') ||
-                        desc.includes('antecipação') || desc.includes('antecipacao');
-
+  // Taxas explícitas (comissão, tarifa nomeada) - não confundir com tipos ambíguos
+  const isExplicitFee = desc.includes('comissão') || desc.includes('comissao') || 
+                        desc.includes('tarifa') || desc.includes('tarif') ||
+                        (desc.includes('taxa') && (desc.includes('marketplace') || desc.includes('mercado') || desc.includes('comissão'))) ||
+                        desc.includes('fee') && !desc.includes('unknown_fee');
+  if (isExplicitFee) return 'taxa';
+  
+  // 2. Detecção de tipos AMBÍGUOS (antes de qualquer fallback)
+  const isAmbiguous = AMBIGUOUS_TERMS.some(term => desc.includes(term));
+  if (isAmbiguous) return 'pendente_classificacao';
+  
+  // 3. Natures Liquidadas
   if (desc.includes('liberação') || desc.includes('liberacao')) return 'liberacao';
   if (desc.includes('repasse') || desc.includes('transferência') || desc.includes('transferencia') || desc.includes('payout')) return 'transferencia';
   if (desc.includes('depósito') || desc.includes('deposito') || desc.includes('crédito') || desc.includes('credito')) return 'deposito';
   if (desc.includes('antecipação') || desc.includes('antecipacao')) return 'antecipacao';
+  if (desc.includes('liquidação') || desc.includes('liquidacao')) return 'deposito';
   
+  // 4. Estornos e chargebacks
   if (desc.includes('estorno') || desc.includes('reembolso') || desc.includes('refund')) return 'estorno';
   if (desc.includes('chargeback')) return 'chargeback';
   
+  // 5. Vendas explícitas
   if (amount > 0 && (desc.includes('venda') || desc.includes('produto') || desc.includes('compra') || desc.includes('pagamento') || desc.includes('payment'))) return 'venda';
   
-  // No modo banco, se não for taxa/frete/estorno, preferimos tratar como repasse/deposito se for positivo
-  if (mode === 'bank' && amount > 0) return 'deposito';
+  // 6. Fallback seguro — no modo banco, valores sem tipo claro vão para revisão
+  if (mode === 'bank') {
+    // Apenas se for "pagamento" puro (já filtrado pelo MP bank filter) podemos assumir deposito
+    if (desc === 'pagamento') return 'deposito';
+    // Tudo mais no modo banco que não foi classificado → pendente
+    return 'pendente_classificacao';
+  }
 
-  if (amount > 0) return 'venda'; 
+  // 7. Fallback para vendas (modo sales) e genérico
+  if (amount > 0) return 'venda';
+  
+  // Negativo não-explícito → pendente de classificação em vez de assumir taxa
+  if (mode === 'generic') return 'pendente_classificacao';
+  
   return 'taxa'; 
 }
 
@@ -477,21 +506,27 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     }
   }
 
-  const primaryLine = lines.find(l => l.detectedType === 'venda' || l.detectedType === 'repasse' || l.detectedType === 'liberacao' || l.detectedType === 'transferencia' || l.detectedType === 'deposito' || l.detectedType === 'entrada_liquidada') || lines[0];
+  const primaryLine = lines.find(l => l.detectedType === 'venda' || l.detectedType === 'repasse' || l.detectedType === 'liberacao' || l.detectedType === 'transferencia' || l.detectedType === 'deposito' || l.detectedType === 'entrada_liquidada' || l.detectedType === 'pendente_classificacao') || lines[0];
   let primaryType = primaryLine.detectedType as ImportEvent['primaryType'];
 
+  // Verificar se alguma linha é pendente de classificação
+  const hasPendingClassification = lines.some(l => l.detectedType === 'pendente_classificacao');
+
   // Ajuste de PrimaryType baseado no Modo
-  if (mode === 'sales') {
-    // Forçar Venda se não for algo explicitamente contrário
-    if (!['venda', 'taxa', 'frete', 'estorno', 'chargeback'].includes(primaryType)) {
-      primaryType = 'venda';
-    }
-  } else if (mode === 'bank') {
-    // Preservar 'entrada_liquidada' caso seja Mercado Pago, ou caso não seja mudar 'venda' para 'outros'
-    if (primaryType === 'entrada_liquidada') {
-      // mantém
-    } else if (primaryType === 'venda') {
-      primaryType = 'outros';
+  // REGRA: pendente_classificacao NUNCA é sobrescrito automaticamente
+  if (primaryType !== 'pendente_classificacao') {
+    if (mode === 'sales') {
+      // Forçar Venda se não for algo explicitamente contrário
+      if (!['venda', 'taxa', 'frete', 'estorno', 'chargeback', 'pendente_classificacao'].includes(primaryType)) {
+        primaryType = 'venda';
+      }
+    } else if (mode === 'bank') {
+      // Preservar 'entrada_liquidada' caso seja Mercado Pago, ou caso não seja mudar 'venda' para 'outros'
+      if (primaryType === 'entrada_liquidada') {
+        // mantém
+      } else if (primaryType === 'venda') {
+        primaryType = 'outros';
+      }
     }
   }
 
@@ -501,7 +536,9 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
   }
 
   let confidence: ImportConfidence = 'alta';
-  if (mode === 'generic') {
+  if (hasPendingClassification || primaryType === 'pendente_classificacao') {
+    confidence = 'revisar';
+  } else if (mode === 'generic') {
     confidence = 'revisar';
   } else if (lines.length === 1 && lines[0].amount < 0) {
     confidence = 'revisar';
@@ -531,6 +568,21 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     historical = true;
   }
 
+  // Determinar classificationStatus
+  const classificationStatus = (hasPendingClassification || primaryType === 'pendente_classificacao') 
+    ? 'pending_review' as const
+    : 'classified' as const;
+
+  // Determinar primaryType final
+  let finalPrimaryType: ImportEvent['primaryType'];
+  if (primaryType === 'pendente_classificacao') {
+    finalPrimaryType = 'pendente_classificacao';
+  } else if (isExternalLiquidation || isInternalLiquidation) {
+    finalPrimaryType = primaryType;
+  } else {
+    finalPrimaryType = mode === 'bank' ? 'outros' : 'venda';
+  }
+
   return {
     id: generateId(),
     source,
@@ -542,12 +594,13 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     freightAmount,
     netAmount,
     confidence,
-    status: mode === 'generic' ? 'pendente' : 'pendente', // Ambos pendentes por enquanto, mas generic pode ser mais rígido no futuro
+    status: 'pendente',
     rawLines: lines,
     explanation,
     flags,
     historical,
-    primaryType: (isExternalLiquidation || isInternalLiquidation) ? primaryType : (mode === 'bank' ? 'outros' : 'venda'),
-    reference: lines.find(l => l.reference)?.reference
+    primaryType: finalPrimaryType,
+    reference: lines.find(l => l.reference)?.reference,
+    classificationStatus
   };
 }

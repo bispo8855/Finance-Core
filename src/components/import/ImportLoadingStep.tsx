@@ -3,16 +3,17 @@ import { Progress } from '@/components/ui/progress';
 import { Loader2, FileSearch, RefreshCcw, LayoutTemplate } from 'lucide-react';
 
 interface ImportLoadingStepProps {
-  stage: 'reading' | 'interpreting' | 'grouping';
+  stage: 'reading' | 'interpreting' | 'grouping' | 'conciliating';
 }
 
 export default function ImportLoadingStep({ stage }: ImportLoadingStepProps) {
   
   const getProgress = () => {
     switch (stage) {
-      case 'reading': return 33;
-      case 'interpreting': return 66;
-      case 'grouping': return 90; // Never 100 until done
+      case 'reading': return 25;
+      case 'interpreting': return 50;
+      case 'grouping': return 75;
+      case 'conciliating': return 90;
       default: return 0;
     }
   };
@@ -26,6 +27,7 @@ export default function ImportLoadingStep({ stage }: ImportLoadingStepProps) {
             {stage === 'reading' && <FileSearch className="w-12 h-12 text-primary animate-pulse" />}
             {stage === 'interpreting' && <RefreshCcw className="w-12 h-12 text-primary animate-spin-slow" />}
             {stage === 'grouping' && <LayoutTemplate className="w-12 h-12 text-primary animate-bounce" />}
+            {stage === 'conciliating' && <RefreshCcw className="w-12 h-12 text-primary animate-spin" />}
           </div>
         </div>
 
@@ -34,11 +36,13 @@ export default function ImportLoadingStep({ stage }: ImportLoadingStepProps) {
             {stage === 'reading' && 'Lendo arquivo...'}
             {stage === 'interpreting' && 'Interpretando transações...'}
             {stage === 'grouping' && 'Agrupando por eventos...'}
+            {stage === 'conciliating' && 'Conciliando com lançamentos...'}
           </h3>
           <p className="text-slate-500 text-sm">
             {stage === 'reading' && 'Extraindo colunas e dados brutos da planilha'}
             {stage === 'interpreting' && 'Classificando taxas, fretes, vendas e deduções'}
             {stage === 'grouping' && 'Consolidando transações usando IDs e datas'}
+            {stage === 'conciliating' && 'Buscando correspondências com vendas previstas existentes'}
           </p>
           
           <div className="pt-4">

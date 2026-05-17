@@ -3,7 +3,9 @@ import { supabaseFinanceService } from './finance/supabaseFinanceService';
 import { CreateDocumentPayload } from './finance/financeService';
 import { settlementDaysBySource } from '@/config/settlementDays';
 
-export async function persistApprovedEvents(events: ImportEvent[], source: ImportSource) {
+const PENDING_CATEGORY_NAME = 'Movimentação Pendente de Classificação';
+
+export async function persistApprovedEvents(events: ImportEvent[], source: ImportSource, batchId?: string) {
   // 1. Pegar a Conta Padrão (primeira ativa)
   const snapshot = await supabaseFinanceService.getSnapshot();
   const defaultAccount = snapshot.accounts.find(a => a.isActive);
@@ -22,7 +24,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
     });
   }
 
-  // 3. Garantir Categoria Padrão
+  // 3. Garantir Categoria Padrão para Vendas
   let category = snapshot.categories.find(c => c.name === 'Venda de Produtos' || c.name === 'Serviços');
   if (!category) {
     category = snapshot.categories.find(c => c.type === 'receita');
@@ -35,7 +37,17 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
      });
   }
 
-  // 4. Iterar sobre eventos e salvar sequencialmente
+  // 4. Garantir Categoria Especial para Movimentações Pendentes de Classificação
+  let pendingCategory = snapshot.categories.find(c => c.name === PENDING_CATEGORY_NAME);
+  if (!pendingCategory) {
+    pendingCategory = await supabaseFinanceService.createCategory({
+      name: PENDING_CATEGORY_NAME,
+      type: 'financeiro',
+      dreClassification: 'outro'
+    });
+  }
+
+  // 5. Iterar sobre eventos e salvar sequencialmente
   let persistCount = 0;
   for (const event of events) {
     if (event.status !== 'aprovado') continue;
@@ -48,10 +60,10 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
              defaultAccount.id,
              event.date.split('T')[0],
              Math.abs(event.netAmount),
-             `Conciliado automaticamente via importação (${source})`
+             `Conciliado automaticamente via importação (${source})${event.matchConfidence ? ` [Match: ${event.matchConfidence}]` : ''}`
           );
           persistCount++;
-          continue; // Pula para o próximo evento
+          continue; // Pula para o próximo evento — NÃO cria novo documento
        }
 
        // --- CASO 2: CRIAÇÃO DE NOVO LANÇAMENTO (Avulso ou Venda) ---
@@ -70,8 +82,12 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
 
        const isDespesa = event.netAmount < 0;
        
+       // Determinar se é pendente de classificação
+       const isPendingClassification = event.classificationStatus === 'pending_review' || event.primaryType === 'pendente_classificacao';
+       
        // Adicionar flag de entrada avulsa na descrição/notas se for liquidado mas não conciliado
        const unmatchedFlag = (isLiquidation && event.reconciliationType === 'none') ? ' [Entrada Avulsa]' : '';
+       const pendingFlag = isPendingClassification ? '[⏳ Pendente de Classificação] ' : '';
        
        // Normalização da Descrição com ID [#REF]
        const refPart = event.reference ? `[#${event.reference}] ` : '';
@@ -79,15 +95,22 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
          ? event.title.replace(`#${event.reference}`, '').replace('Venda ', 'Venda').trim()
          : event.title;
        
-       const description = `${refPart}${cleanTitle}${unmatchedFlag}`.trim();
+       const description = `${pendingFlag}${refPart}${cleanTitle}${unmatchedFlag}`.trim();
+
+       // Escolher categoria: se pendente de classificação, usar categoria especial
+       const effectiveCategoryId = isPendingClassification 
+         ? pendingCategory.id 
+         : (event.categoryId || category.id);
 
        // Evitar falsas vendas no modo bank, registrando apenas como receita para entradas líquidas
-       const docType = (event.primaryType === 'entrada_liquidada' && !isDespesa) ? 'receita' : (isDespesa ? 'despesa' : 'venda');
+       const docType = isPendingClassification 
+         ? (isDespesa ? 'despesa' : 'receita')
+         : (event.primaryType === 'entrada_liquidada' && !isDespesa) ? 'receita' : (isDespesa ? 'despesa' : 'venda');
 
        const payload: CreateDocumentPayload = {
          type: docType,
          contactId: contact.id,
-         categoryId: event.categoryId || category.id,
+         categoryId: effectiveCategoryId,
          competenceDate: competence,
          firstDueDate: finalDueDate,
          totalValue: Math.abs(event.netAmount),
@@ -98,7 +121,9 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
          description,
          condition: 'avista',
          installments: 1,
-         referenceId: event.reference
+         referenceId: event.reference,
+         sourceType: source,
+         importBatchId: batchId
        };
 
        // Se payNow estiver ativo, criar documento já baixado na conta padrão
@@ -113,3 +138,4 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
 
   return persistCount;
 }
+

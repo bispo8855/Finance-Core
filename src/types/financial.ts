@@ -50,6 +50,8 @@ export interface FinancialDocument {
   marketplaceFee?: number;
   shippingCost?: number;
   referenceId?: string;
+  sourceType?: string;
+  importBatchId?: string;
 }
 
 export interface Title {

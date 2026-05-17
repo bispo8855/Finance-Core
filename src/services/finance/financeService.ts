@@ -14,6 +14,8 @@ export interface FinanceSnapshot {
 export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'> & {
   customInstallments?: { dueDate: string; value: number }[];
   firstDueDate?: string;
+  sourceType?: string;
+  importBatchId?: string;
 };
 
 export interface UserProfile {
@@ -68,4 +70,11 @@ export interface IFinanceService {
   
   deleteTitle(titleId: string): Promise<void>;
   deleteDocument(documentId: string): Promise<void>;
+  
+  // Reclassification
+  reclassifyDocument(
+    documentId: string,
+    categoryId: string,
+    newDescription?: string
+  ): Promise<FinancialDocument>;
 }
