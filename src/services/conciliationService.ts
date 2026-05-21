@@ -40,8 +40,9 @@ const LIQUIDATION_TYPES = [
 function shouldAttemptConciliation(event: ImportEvent): boolean {
   // Modo banco: tudo tenta conciliar
   if (event.mode === 'bank') return true;
-  // Modo vendas: apenas liquidações
+  // Modo vendas: apenas liquidações ou eventos liquidados (recebimentos imediatos)
   if (event.mode === 'sales') {
+    if (event.settlementStatus === 'settled') return true;
     return LIQUIDATION_TYPES.includes(event.primaryType as typeof LIQUIDATION_TYPES[number]);
   }
   // Modo genérico: não concilia automaticamente

@@ -29,6 +29,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { getAuthRedirectPath } from "./utils/navigation";
 import { GlobalErrorBoundary } from "./components/shared/GlobalErrorBoundary";
 
+const PersonalLanding = lazy(() => import("./pages/PersonalLanding"));
+
 const Home = () => {
   const { session, isLoading } = useAuth();
 
@@ -87,6 +89,7 @@ const App = () => (
               <Routes>
                 {/* Rotas Públicas */}
                 <Route path="/" element={<Home />} />
+                <Route path="/personal" element={<PersonalLanding />} />
                 <Route path="/login" element={<Login />} />
                 <Route path="/reset-password" element={<ResetPassword />} />
                 <Route element={<ProtectedRoute><ResetData /></ProtectedRoute>} path="/reset-data" />

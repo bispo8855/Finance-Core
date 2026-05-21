@@ -116,6 +116,10 @@ export async function processImportFile(
     // Para ml sales, forçamos o colDesc a ser o mesmo do produto. 
     // Se não houver, o fallback cuidará de usar "Venda Mercado Livre #REF".
     colDesc = colProduct;
+
+    // Também precisamos dos status de liquidação e datas de liberação para Mercado Livre Sales
+    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao']);
+    colReleaseDate = findBestCol(['data de liberacao', 'data de liquidação', 'release date', 'payout date', 'data de repasse', 'data de liberação', 'data de liquidação', 'liberação do dinheiro', 'liberacao do dinheiro', 'data de disponibilidade', 'disponivel em']);
   } else {
     colDate = findBestCol(['data da venda', 'data de liberacao', 'data de', 'data', 'date', 'criacao', 'horario', 'release_date']);
     
@@ -481,6 +485,17 @@ function inferSettlementLineStatus(
   const d = desc.toLowerCase();
   const s = rawStatus.toLowerCase();
   const combined = `${d} ${s}`;
+
+  const reviewKeywords = [
+    'em revisão', 'em revisao', 'bloqueado', 'bloqueio', 'contestação', 'contestacao', 
+    'disputa', 'reclamação', 'reclamacao', 'mediação', 'mediacao', 'retido', 'retenção', 
+    'retencao', 'revisão', 'revisao', 'under review', 'blocked', 'dispute', 'claim', 
+    'mediation', 'hold', 'suspended', 'suspenso'
+  ];
+  const hasReviewKeyword = reviewKeywords.some(k => combined.includes(k));
+  if (hasReviewKeyword) {
+     return { status: 'review', confidence: 0.85, reason: 'O status ou descrição original indicam que a transação está em revisão, contestação ou bloqueio.' };
+  }
 
   const keywords = [
     'recebido', 'recebimento', 'liquidado', 'baixado', 'liberado', 'liberação', 'liberacao', 
