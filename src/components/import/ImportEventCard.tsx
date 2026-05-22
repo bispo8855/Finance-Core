@@ -216,6 +216,57 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
             <div className="md:col-span-1 space-y-4">
               <h5 className="text-sm font-bold tracking-tight text-slate-900 uppercase">Breakdown</h5>
               
+              {/* SEÇÃO: CLASSIFICAÇÃO GERENCIAL */}
+              <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3">
+                <h6 className="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                  <span className="text-base">📊</span> Classificação Gerencial
+                </h6>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Tipo Detectado</span>
+                    <span className="font-semibold text-slate-800">{event.detectedTypeLabel || 'Não detectado'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Categoria Sugerida</span>
+                    <span className="font-bold text-primary">{event.suggestedCategoryName || 'Movimentação Pendente de Classificação'}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Confiança</span>
+                    <Badge variant="outline" className={cn("text-[9px] uppercase font-bold px-1.5 py-0.5",
+                      event.classificationConfidence === 'alta' ? "text-emerald-700 border-emerald-200 bg-emerald-50" :
+                      event.classificationConfidence === 'media' ? "text-blue-700 border-blue-200 bg-blue-50" :
+                      "text-amber-700 border-amber-200 bg-amber-50"
+                    )}>
+                      {event.classificationConfidence === 'alta' ? 'Alta' : event.classificationConfidence === 'media' ? 'Média' : 'Revisar'}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center py-1 border-b border-slate-50">
+                    <span className="text-slate-500 font-medium">Status</span>
+                    <Badge className={cn("text-[9px] font-bold px-1.5 py-0.5",
+                      event.classificationStatus === 'classified' ? "bg-emerald-500 hover:bg-emerald-600 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"
+                    )}>
+                      {event.classificationStatus === 'classified' ? 'Classificado' : 'Em revisão'}
+                    </Badge>
+                  </div>
+                  {event.classificationReason && (
+                    <div className="pt-2">
+                      <span className="text-slate-500 font-medium block mb-1">Motivo da Sugestão</span>
+                      <p className="text-slate-600 bg-slate-50 p-2 rounded border border-slate-100 italic leading-relaxed text-[11px]">
+                        {event.classificationReason}
+                      </p>
+                    </div>
+                  )}
+                  {event.suggestedAction && (
+                    <div className="pt-1">
+                      <span className="text-slate-500 font-medium block mb-1">Ação Sugerida</span>
+                      <p className="text-slate-700 font-medium">
+                        {event.suggestedAction}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
               {(event.primaryType === 'entrada_liquidada' || event.mode === 'bank') ? (
                 <div className="space-y-3">
                   <div className="flex justify-between text-sm">

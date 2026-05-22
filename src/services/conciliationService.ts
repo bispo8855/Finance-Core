@@ -224,6 +224,142 @@ export function conciliateBatch(
       }
     }
 
+    // D. Refinamento da Classificação Semântica com base no snapshot do Banco/Contatos/Histórico
+    const initialPending = updated.classificationStatus === 'pending_review';
+
+    if (updated.suggestedCategoryName === 'Recebimentos via Pix' || updated.detectedTypeLabel === 'Pagamento com Código QR Pix') {
+      if (updated.reconciliationId && updated.reconciliationType === 'match') {
+        const matchedTitle = snapshot.titles.find(t => t.id === updated.reconciliationId);
+        const matchedDoc = matchedTitle ? snapshot.documents.find(d => d.id === matchedTitle.documentId) : null;
+        const matchedCategory = matchedDoc ? snapshot.categories.find(c => c.id === matchedDoc.categoryId) : null;
+        
+        if (matchedCategory) {
+          updated.suggestedCategoryName = matchedCategory.name;
+          updated.categoryId = matchedCategory.id;
+        } else {
+          updated.suggestedCategoryName = 'Venda de Produtos';
+        }
+        updated.classificationConfidence = 'alta';
+        updated.classificationStatus = 'classified';
+        updated.classificationReason = `Conciliado com o título previsto: ${matchedTitle?.description || matchedDoc?.description || 'Título'}`;
+        updated.suggestedAction = 'Nenhuma ação necessária.';
+      } else {
+        updated.suggestedCategoryName = 'Recebimentos via Pix';
+        updated.classificationConfidence = 'media';
+        updated.classificationStatus = 'pending_review';
+        updated.classificationReason = 'Recebimento Pix sem título previsto correspondente no sistema.';
+        updated.suggestedAction = 'Aguardando conciliação comercial ou revisão.';
+      }
+    } else if (updated.title?.toLowerCase().includes('pix enviado') || updated.detectedTypeLabel?.includes('Pix enviado')) {
+      let recipient = (updated.title || '').replace(/pix enviado/i, '').trim();
+      recipient = recipient.replace(/\b\d{2,3}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '').replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '').replace(/^\d+\s+/, '').trim();
+
+      const matchedContact = snapshot.contacts.find(c => {
+        const cName = c.name.toLowerCase();
+        const rName = recipient.toLowerCase();
+        return cName.includes(rName) || rName.includes(cName);
+      });
+
+      if (matchedContact) {
+        const contactDocs = snapshot.documents.filter(d => d.contactId === matchedContact.id);
+        const lastDoc = contactDocs.length > 0 ? contactDocs[contactDocs.length - 1] : null;
+        const lastCategory = lastDoc ? snapshot.categories.find(c => c.id === lastDoc.categoryId) : null;
+
+        if (lastCategory) {
+          if (lastCategory.type !== 'receita' && lastCategory.dreClassification !== 'receita_bruta') {
+            updated.suggestedCategoryName = lastCategory.name;
+            updated.categoryId = lastCategory.id;
+            updated.classificationConfidence = 'alta';
+            updated.classificationStatus = 'classified';
+            updated.classificationReason = `Categoria identificada via histórico do contato: ${matchedContact.name}`;
+            updated.suggestedAction = `Registrar como ${lastCategory.name}.`;
+          } else {
+            updated.suggestedCategoryName = 'Pagamento de Fornecedor';
+            updated.classificationConfidence = 'revisar';
+            updated.classificationStatus = 'pending_review';
+            updated.classificationReason = `Contato ${matchedContact.name} encontrado, mas sua última categoria era de receita (Proteção de Receita).`;
+            updated.suggestedAction = 'Revisar pagamento de fornecedor.';
+          }
+        } else {
+          if (matchedContact.type === 'fornecedor' || matchedContact.type === 'ambos') {
+            updated.suggestedCategoryName = 'Pagamento de Fornecedor';
+            updated.classificationConfidence = 'revisar';
+            updated.classificationStatus = 'pending_review';
+            updated.classificationReason = `Contato cadastrado (${matchedContact.name}) mas sem histórico de lançamentos.`;
+            updated.suggestedAction = 'Revisar pagamento de fornecedor.';
+          } else {
+            updated.suggestedCategoryName = 'Transferência / Retirada';
+            updated.classificationConfidence = 'media';
+            updated.classificationStatus = 'pending_review';
+            updated.classificationReason = `Contato cadastrado (${matchedContact.name}) sem histórico, tratado como transferência/retirada.`;
+            updated.suggestedAction = 'Revisar se é retirada, transferência pessoal ou outro tipo de saída.';
+          }
+        }
+      } else {
+        const isPJ = /\b(ltda|s\/a|s\.a\.|comercio|comércio|importacao|importação|exportacao|exportação|industria|indústria|distribuidora|servicos|serviços|cia|me|eireli|epp|limitada|sociedade|e&e)\b/i.test(recipient);
+        const hasProductKeyword = /\b(mercadoria|estoque|produto|fornecedor|compra|pecas|peças|insumos|embalagem)\b/i.test(recipient.toLowerCase()) || 
+                                   /\b(mercadoria|estoque|produto|fornecedor|compra|pecas|peças|insumos|embalagem)\b/i.test(updated.title.toLowerCase());
+        
+        if (isPJ) {
+          if (hasProductKeyword) {
+            updated.suggestedCategoryName = 'Compra de mercadoria';
+            updated.classificationConfidence = 'alta';
+            updated.classificationStatus = 'classified';
+            updated.classificationReason = 'Pix enviado para empresa com evidência de fornecimento de mercadoria.';
+            updated.suggestedAction = 'Confirmar compra de mercadoria para estoque.';
+          } else {
+            updated.suggestedCategoryName = 'Pagamento de Fornecedor';
+            updated.classificationConfidence = 'revisar';
+            updated.classificationStatus = 'pending_review';
+            updated.classificationReason = 'Pix enviado para empresa sem contato ou histórico cadastrado.';
+            updated.suggestedAction = 'Revisar se é pagamento de fornecedor ou compra.';
+          }
+        } else {
+          updated.suggestedCategoryName = 'Transferência / Retirada';
+          updated.classificationConfidence = 'media';
+          updated.classificationStatus = 'pending_review';
+          updated.classificationReason = 'Pix enviado para pessoa física (sem indicador de empresa)';
+          updated.suggestedAction = 'Revisar se é retirada, transferência pessoal ou outro tipo de saída.';
+        }
+      }
+    }
+
+    if (updated.suggestedCategoryName && !updated.categoryId) {
+      const matchCat = snapshot.categories.find(c => c.name.toLowerCase() === updated.suggestedCategoryName!.toLowerCase());
+      if (matchCat) {
+        updated.categoryId = matchCat.id;
+      }
+    }
+
+    // Proteção Global de Receita em Saída
+    if (updated.netAmount < 0) {
+      if (updated.suggestedCategoryName === 'Venda de Produtos' || updated.suggestedCategoryName === 'Recebimentos via Pix') {
+        updated.suggestedCategoryName = 'Movimentação Pendente de Classificação';
+        updated.classificationConfidence = 'revisar';
+        updated.classificationStatus = 'pending_review';
+        updated.classificationReason = 'Proteção Global de Receita: Impedida categoria de receita em valor negativo.';
+        updated.suggestedAction = 'Definir uma despesa ou movimentação financeira adequada.';
+        const matchCat = snapshot.categories.find(c => c.name === 'Movimentação Pendente de Classificação');
+        if (matchCat) {
+          updated.categoryId = matchCat.id;
+        }
+      }
+    }
+
+    // Bloquear auto-aprovação se classificação semântica estiver em revisão ou confiança for média/revisar
+    if (updated.classificationStatus === 'pending_review' || updated.classificationConfidence === 'media' || updated.classificationConfidence === 'revisar') {
+      updated.status = 'pendente';
+      if (updated.confidence === 'alta') {
+        updated.confidence = updated.classificationConfidence === 'media' ? 'media' : 'revisar';
+      }
+    }
+
+    if (updated.classificationStatus === 'pending_review' && !initialPending) {
+      stats.pendingClassification++;
+    } else if (updated.classificationStatus !== 'pending_review' && initialPending) {
+      stats.pendingClassification--;
+    }
+
     // Modo genérico: sempre revisar
     if (updated.mode === 'generic') updated.confidence = 'revisar';
 

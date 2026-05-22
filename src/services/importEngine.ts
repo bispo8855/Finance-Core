@@ -188,12 +188,9 @@ export async function processImportFile(
 
     const normalizedDesc = normalize(descRaw);
 
-    // REGRA ESPECÍFICA: Mercado Pago + Modo Bank
+    // REGRA ESPECÍFICA: Mercado Pago + Modo Bank (removido filtro restritivo de pagamento)
     if (source === 'Mercado Pago' && mode === 'bank') {
       console.log('MP BANK - DESC RAW:', descRaw, '| NORMALIZED:', normalizedDesc);
-      if (normalizedDesc !== 'pagamento') {
-        continue; // Ignora tudo que não é estritamente 'pagamento'
-      }
     }
     
     // A referência já foi normalizada acima
@@ -427,8 +424,19 @@ const AMBIGUOUS_TERMS = [
 ];
 
 function inferLineType(description: string, amount: number, mode: ImportMode): ImportRawLine['detectedType'] {
-  const desc = description.toLowerCase();
+  const desc = description.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   
+  // Regras de Classificação Semântica para Mercado Pago/Mercado Livre
+  if (desc.includes('liberacao de dinheiro')) {
+    return amount > 0 ? 'liberacao' : 'pendente_classificacao';
+  }
+  if (desc.includes('pagamento com codigo qr pix') || desc.includes('qr pix')) {
+    return amount > 0 ? 'entrada_liquidada' : 'pendente_classificacao';
+  }
+  if (desc.includes('pix enviado')) return 'transferencia';
+  if (desc.includes('pagamento cartao de credito') || desc.includes('pagamento cartao')) return 'transferencia';
+  if (desc.includes('debito por divida') || desc.includes('dinheiro retido') || desc.includes('retido')) return 'pendente_classificacao';
+
   // 1. Tipos claros e explícitos (alta confiança)
   if (desc.includes('frete') || desc.includes('envio') || desc.includes('shipping')) return 'frete';
   
@@ -708,6 +716,145 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
      }
   }
 
+  // Camada de Classificação Semântica Inicial
+  let detectedTypeLabel = 'Outros';
+  let suggestedCategoryName = 'Movimentação Pendente de Classificação';
+  let classificationReason = 'Classificação automática não conclusiva';
+  let classificationConfidence: 'alta' | 'media' | 'revisar' = 'revisar';
+  let suggestedAction = 'Revisar classificação gerencial do lançamento.';
+  let initialClassificationStatus: ImportEvent['classificationStatus'] = 'pending_review';
+
+  const descLower = title.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  if (netAmount > 0) {
+    // --- ENTRADAS ---
+    if (descLower.includes('liberacao de dinheiro') || finalPrimaryType === 'liberacao') {
+      detectedTypeLabel = 'Liberação de dinheiro';
+      suggestedCategoryName = 'Venda de Produtos';
+      classificationReason = 'Liberação de saldo positivo na conta do gateway';
+      classificationConfidence = 'alta';
+      suggestedAction = 'Conciliar com venda ou registrar como receita.';
+      initialClassificationStatus = 'classified';
+    } else if (descLower.includes('codigo qr pix') || descLower.includes('qr pix') || descLower.includes('pix recebido') || descLower.includes('recebimento pix')) {
+      detectedTypeLabel = 'Pagamento com Código QR Pix';
+      suggestedCategoryName = 'Recebimentos via Pix';
+      classificationReason = 'Recebimento de venda via Pix QR';
+      classificationConfidence = 'media';
+      suggestedAction = 'Aguardando conciliação comercial ou revisão.';
+      initialClassificationStatus = 'pending_review';
+    } else {
+      detectedTypeLabel = 'Entrada de Recursos';
+      suggestedCategoryName = 'Recebimentos via Pix';
+      classificationReason = 'Entrada de valor via transação financeira';
+      classificationConfidence = 'media';
+      suggestedAction = 'Confirmar categoria de receita apropriada.';
+      initialClassificationStatus = 'pending_review';
+    }
+  } else {
+    // --- SAÍDAS (netAmount < 0) ---
+    if (descLower.includes('pagamento cartao de credito') || descLower.includes('pagamento cartao')) {
+      detectedTypeLabel = 'Pagamento de Cartão de Crédito';
+      suggestedCategoryName = 'Pagamento de Cartão de Crédito';
+      classificationReason = 'Saída para pagamento de fatura de cartão de crédito';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como movimentação financeira (sem DRE).';
+      initialClassificationStatus = 'pending_review';
+    } else if (descLower.includes('debito por divida') || descLower.includes('dinheiro retido') || descLower.includes('retido') || descLower.includes('retencao')) {
+      detectedTypeLabel = 'Retenção de Saldo';
+      suggestedCategoryName = 'Retenção';
+      classificationReason = 'Retenção ou débito automático judicial/dívida';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como retenção temporária (sem DRE).';
+      initialClassificationStatus = 'pending_review';
+    } else if (descLower.includes('ajuste') || descLower.includes('regularizacao')) {
+      detectedTypeLabel = 'Ajuste de Saldo';
+      suggestedCategoryName = 'Ajuste Mercado Pago';
+      classificationReason = 'Ajuste de saldo efetuado pelo gateway';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como ajuste financeiro temporário (sem DRE).';
+      initialClassificationStatus = 'pending_review';
+    } else if (descLower.includes('tarifa') || descLower.includes('taxa') || descLower.includes('custo operacional') || descLower.includes('comissao') || descLower.includes('fee')) {
+      if (descLower.includes('retido') || descLower.includes('retencao') || descLower.includes('divida')) {
+        detectedTypeLabel = 'Retenção / Tarifa Ambígua';
+        suggestedCategoryName = 'Movimentação Pendente de Classificação';
+        classificationReason = 'Movimentação possui características de tarifa e retenção';
+        classificationConfidence = 'revisar';
+        suggestedAction = 'Confirmar se é custo fixo/variável ou apenas retenção temporária.';
+        initialClassificationStatus = 'pending_review';
+      } else {
+        detectedTypeLabel = 'Tarifa';
+        suggestedCategoryName = 'Tarifa';
+        classificationReason = 'Tarifa ou taxa de serviço operacional do gateway';
+        classificationConfidence = 'alta';
+        suggestedAction = 'Registrar como despesa de tarifa.';
+        initialClassificationStatus = 'classified';
+      }
+    } else if (descLower.includes('pix enviado')) {
+      let recipient = title.replace(/pix enviado/i, '').trim();
+      recipient = recipient.replace(/\b\d{2,3}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/g, '');
+      recipient = recipient.replace(/\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/g, '');
+      recipient = recipient.replace(/^\d+\s+/, '');
+      recipient = recipient.trim();
+
+      const isPJ = /\b(ltda|s\/a|s\.a\.|comercio|comércio|importacao|importação|exportacao|exportação|industria|indústria|distribuidora|servicos|serviços|cia|me|eireli|epp|limitada|sociedade|e&e)\b/i.test(recipient);
+
+      if (isPJ) {
+        const hasProductKeyword = /\b(mercadoria|estoque|produto|fornecedor|compra|pecas|peças|insumos|embalagem)\b/i.test(descLower);
+        if (hasProductKeyword) {
+          detectedTypeLabel = 'Pix enviado (Empresa)';
+          suggestedCategoryName = 'Compra de mercadoria';
+          classificationReason = 'Pix enviado para empresa com termos de produto/estoque';
+          classificationConfidence = 'alta';
+          suggestedAction = 'Confirmar compra de mercadoria para estoque.';
+          initialClassificationStatus = 'classified';
+        } else {
+          detectedTypeLabel = 'Pix enviado (Empresa)';
+          suggestedCategoryName = 'Pagamento de Fornecedor';
+          classificationReason = 'Pix enviado para pessoa jurídica (empresa)';
+          classificationConfidence = 'revisar';
+          suggestedAction = 'Revisar pagamento de fornecedor ou compra.';
+          initialClassificationStatus = 'pending_review';
+        }
+      } else {
+        detectedTypeLabel = 'Pix enviado (Pessoa Física)';
+        suggestedCategoryName = 'Transferência / Retirada';
+        classificationReason = 'Pix enviado para pessoa física (sem indicador de empresa)';
+        classificationConfidence = 'media';
+        suggestedAction = 'Revisar se é retirada, transferência pessoal ou outro tipo de saída.';
+        initialClassificationStatus = 'pending_review';
+      }
+    } else {
+      detectedTypeLabel = 'Saída de Recursos';
+      suggestedCategoryName = 'Movimentação Pendente de Classificação';
+      classificationReason = 'Saída de valor não identificada automaticamente';
+      classificationConfidence = 'revisar';
+      suggestedAction = 'Revisar classificação gerencial do lançamento.';
+      initialClassificationStatus = 'pending_review';
+    }
+  }
+
+  // Proteção Global de Receita em Saída
+  if (netAmount < 0) {
+    if (suggestedCategoryName === 'Venda de Produtos' || suggestedCategoryName === 'Recebimentos via Pix') {
+      suggestedCategoryName = 'Movimentação Pendente de Classificação';
+      classificationConfidence = 'revisar';
+      initialClassificationStatus = 'pending_review';
+      classificationReason = 'Proteção Global de Receita: Impedida categoria de receita em valor negativo.';
+      suggestedAction = 'Definir uma despesa ou movimentação financeira adequada.';
+    }
+  }
+
+  // Atualizar a confiança geral se a classificação semântica exigir revisão
+  const finalClassificationStatus = (hasPendingClassification || primaryType === 'pendente_classificacao') 
+    ? 'pending_review' as const 
+    : initialClassificationStatus;
+
+  if (finalClassificationStatus === 'pending_review') {
+    if (confidence === 'alta') {
+      confidence = classificationConfidence === 'media' ? 'media' : 'revisar';
+    }
+  }
+
   return {
     id: generateId(),
     source,
@@ -726,9 +873,14 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     historical,
     primaryType: finalPrimaryType,
     reference: lines.find(l => l.reference)?.reference,
-    classificationStatus,
+    classificationStatus: finalClassificationStatus,
     settlementStatus: eventSettlementStatus,
     settlementReason: eventSettlementReason,
-    settlementConfidence: eventSettlementConfidence
+    settlementConfidence: eventSettlementConfidence,
+    detectedTypeLabel,
+    suggestedCategoryName,
+    classificationReason,
+    classificationConfidence,
+    suggestedAction
   };
 }

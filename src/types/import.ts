@@ -69,6 +69,13 @@ export interface ImportEvent {
   settlementStatus?: 'predicted' | 'settled' | 'review';
   settlementConfidence?: number;
   settlementReason?: string;
+
+  // Semantic Classification Layer
+  detectedTypeLabel?: string;
+  suggestedCategoryName?: string;
+  classificationReason?: string;
+  classificationConfidence?: 'alta' | 'media' | 'revisar';
+  suggestedAction?: string;
 }
 
 export interface ImportBatch {

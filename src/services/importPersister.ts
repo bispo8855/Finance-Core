@@ -82,7 +82,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        // Regra de Ouro: Tipos "Liquidados" nascem pagos e sem data futura
        const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType);
        let payNow = event.historical || isLiquidation || event.settlementStatus === 'settled';
-       if (event.settlementStatus === 'review') {
+       if (event.settlementStatus === 'review' && event.mode !== 'bank') {
           payNow = false;
        }
        const finalDueDate = payNow ? competence : dueDate;
@@ -104,10 +104,52 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        
        const description = `${pendingFlag}${refPart}${cleanTitle}${unmatchedFlag}`.trim();
 
-       // Escolher categoria: se pendente de classificação, usar categoria especial
-       const effectiveCategoryId = isPendingClassification 
-         ? pendingCategory.id 
-         : (event.categoryId || category.id);
+        // Escolher ou criar a categoria sugerida on-demand
+        let resolvedCategoryId = event.categoryId;
+
+        if (event.suggestedCategoryName) {
+          let existingCat = snapshot.categories.find(c => c.name.toLowerCase() === event.suggestedCategoryName!.toLowerCase());
+          if (!existingCat) {
+            const CATEGORY_DEFS: Record<string, { type: 'receita' | 'despesa' | 'custo' | 'financeiro'; dreClassification: string }> = {
+              'Venda de Produtos': { type: 'receita', dreClassification: 'receita_bruta' },
+              'Recebimentos via Pix': { type: 'receita', dreClassification: 'receita_bruta' },
+              'Transferência / Retirada': { type: 'financeiro', dreClassification: 'outro' },
+              'Pagamento de Cartão de Crédito': { type: 'financeiro', dreClassification: 'outro' },
+              'Ajuste Mercado Pago': { type: 'financeiro', dreClassification: 'outro' },
+              'Retenção': { type: 'financeiro', dreClassification: 'outro' },
+              'Pagamento de Fornecedor': { type: 'custo', dreClassification: 'custo_variavel' },
+              'Compra de mercadoria': { type: 'custo', dreClassification: 'custo_variavel' },
+              'Tarifa': { type: 'despesa', dreClassification: 'despesa_fixa' }
+            };
+
+            const def = CATEGORY_DEFS[event.suggestedCategoryName] || { type: 'financeiro', dreClassification: 'outro' };
+            existingCat = await supabaseFinanceService.createCategory({
+              name: event.suggestedCategoryName,
+              type: def.type,
+              dreClassification: def.dreClassification as any,
+              isActive: true
+            });
+            snapshot.categories.push(existingCat);
+          }
+          resolvedCategoryId = existingCat.id;
+        }
+
+        // Escolher categoria: se pendente de classificação e não tem categoria sugerida resolvida, usar categoria especial
+        let finalCategoryId = (isPendingClassification && (!resolvedCategoryId || resolvedCategoryId === pendingCategory.id))
+          ? pendingCategory.id 
+          : (resolvedCategoryId || category.id);
+
+        // Proteção Global de Receita em Saída
+        if (event.netAmount < 0) {
+          let currentCat = snapshot.categories.find(c => c.id === finalCategoryId);
+          if (!currentCat) currentCat = category;
+          
+          if (currentCat.type === 'receita' || currentCat.dreClassification === 'receita_bruta') {
+            finalCategoryId = pendingCategory.id;
+          }
+        }
+
+        const effectiveCategoryId = finalCategoryId;
 
        // Evitar falsas vendas no modo bank, registrando apenas como receita para entradas líquidas
        const docType = isPendingClassification 
