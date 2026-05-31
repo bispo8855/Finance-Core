@@ -13,29 +13,32 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function UserCompanyBadge() {
-  const { user, isLoading, signOut } = useAuth();
+  const { user, profile, activeWorkspace, isLoading, signOut } = useAuth();
 
   const { companyName, userName, initials } = useMemo(() => {
     if (!user) return { companyName: 'Minha Empresa', userName: 'Visitante', initials: 'V' };
 
-    // Tentar extrair do metadata (caso seu sistema grave lá no futuro)
-    const rawCompany = user.user_metadata?.company_name || 'Minha Empresa';
+    const wName = activeWorkspace?.name || 'Minha Empresa';
+    const uName = profile?.displayName || profile?.fullName || user.email?.split('@')[0] || 'Usuário';
     
-    // Tentar extrair do Display Name, full_name, ou usar prefixo do email
-    const fullName = user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'Usuário';
-    
-    // Pegar 1 ou 2 iniciais para o Avatar
-    const names = fullName.split(' ');
-    const init = names.length > 1 
-      ? `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase()
-      : names[0].substring(0, 2).toUpperCase();
+    let init = '';
+    if (activeWorkspace?.avatarInitials) {
+      init = activeWorkspace.avatarInitials;
+    } else {
+      const names = wName.split(' ').filter(Boolean);
+      if (names.length > 1) {
+        init = `${names[0][0]}${names[names.length - 1][0]}`.toUpperCase();
+      } else {
+        init = wName.substring(0, 2).toUpperCase();
+      }
+    }
 
     return {
-      companyName: rawCompany,
-      userName: fullName,
+      companyName: wName,
+      userName: uName,
       initials: init
     };
-  }, [user]);
+  }, [user, profile, activeWorkspace]);
 
   if (isLoading) {
     return (

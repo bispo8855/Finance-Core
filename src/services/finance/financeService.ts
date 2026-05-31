@@ -20,7 +20,20 @@ export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'> 
 
 export interface UserProfile {
   id: string;
-  onboardingCompleted: boolean;
+  onboardingCompleted?: boolean;
+  fullName?: string | null;
+  displayName?: string | null;
+  avatarInitials?: string | null;
+}
+
+export interface Workspace {
+  id: string;
+  ownerId: string;
+  name: string;
+  legalName?: string | null;
+  documentNumber?: string | null;
+  workspaceType: 'business' | 'personal';
+  avatarInitials?: string | null;
 }
 
 export interface IFinanceService {
@@ -28,6 +41,9 @@ export interface IFinanceService {
   
   getProfile(): Promise<UserProfile | null>;
   updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile>;
+  getActiveWorkspace(): Promise<Workspace | null>;
+  updateActiveWorkspace(payload: Partial<Omit<Workspace, 'id' | 'ownerId'>>): Promise<Workspace>;
+  ensureDefaultWorkspaceForUser(): Promise<Workspace>;
   
   createDocument(
     payload: CreateDocumentPayload,

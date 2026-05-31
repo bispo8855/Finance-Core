@@ -1,6 +1,6 @@
 import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 import { initialCategories, initialAccounts, initialContacts, initialDocuments, initialTitles, initialMovements } from '@/data/mockData';
-import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile } from './financeService';
+import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile, Workspace } from './financeService';
 
 // Mutable in-memory DB simulate persistent layer
 const categories = [...initialCategories];
@@ -9,23 +9,94 @@ const contacts = [...initialContacts];
 const documents = [...initialDocuments];
 const titles = [...initialTitles];
 const movements = [...initialMovements];
-let mockProfile: { onboarding_completed: boolean } | null = { onboarding_completed: false };
+
+let mockProfile: {
+  onboarding_completed: boolean;
+  full_name?: string | null;
+  display_name?: string | null;
+  avatar_initials?: string | null;
+} | null = {
+  onboarding_completed: false,
+  full_name: 'Marcelo Bispo Leandro',
+  display_name: 'Marcelo',
+  avatar_initials: 'MB'
+};
+
+let mockWorkspaces: Workspace[] = [
+  {
+    id: 'mock-workspace-id',
+    ownerId: 'mock-user',
+    name: 'Minha Empresa',
+    legalName: 'Minha Empresa Ltda',
+    documentNumber: '00.000.000/0001-00',
+    workspaceType: 'business',
+    avatarInitials: 'ME'
+  }
+];
 
 const uid = () => 'id_' + Math.random().toString(36).substr(2, 9);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class MockFinanceService implements IFinanceService {
   async getProfile(): Promise<UserProfile | null> {
-    await delay(200);
+    await delay(100);
     if (!mockProfile) return null;
-    return { id: 'mock-user', onboardingCompleted: mockProfile.onboarding_completed };
+    return {
+      id: 'mock-user',
+      onboardingCompleted: mockProfile.onboarding_completed,
+      fullName: mockProfile.full_name || null,
+      displayName: mockProfile.display_name || null,
+      avatarInitials: mockProfile.avatar_initials || null
+    };
   }
 
   async updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile> {
-    await delay(200);
+    await delay(100);
     if (!mockProfile) mockProfile = { onboarding_completed: false };
     if (payload.onboardingCompleted !== undefined) mockProfile.onboarding_completed = payload.onboardingCompleted;
-    return { id: 'mock-user', onboardingCompleted: mockProfile.onboarding_completed };
+    if (payload.fullName !== undefined) mockProfile.full_name = payload.fullName;
+    if (payload.displayName !== undefined) mockProfile.display_name = payload.displayName;
+    if (payload.avatarInitials !== undefined) mockProfile.avatar_initials = payload.avatarInitials;
+    
+    return {
+      id: 'mock-user',
+      onboardingCompleted: mockProfile.onboarding_completed,
+      fullName: mockProfile.full_name,
+      displayName: mockProfile.display_name,
+      avatarInitials: mockProfile.avatar_initials
+    };
+  }
+
+  async getActiveWorkspace(): Promise<Workspace | null> {
+    await delay(100);
+    return mockWorkspaces[0] || null;
+  }
+
+  async updateActiveWorkspace(payload: Partial<Omit<Workspace, 'id' | 'ownerId'>>): Promise<Workspace> {
+    await delay(100);
+    if (mockWorkspaces.length === 0) {
+      mockWorkspaces.push({
+        id: 'mock-workspace-id',
+        ownerId: 'mock-user',
+        name: 'Minha Empresa',
+        workspaceType: 'business'
+      });
+    }
+    mockWorkspaces[0] = { ...mockWorkspaces[0], ...payload };
+    return mockWorkspaces[0];
+  }
+
+  async ensureDefaultWorkspaceForUser(): Promise<Workspace> {
+    await delay(100);
+    if (mockWorkspaces.length === 0) {
+      mockWorkspaces.push({
+        id: 'mock-workspace-id',
+        ownerId: 'mock-user',
+        name: 'Minha Empresa',
+        workspaceType: 'business'
+      });
+    }
+    return mockWorkspaces[0];
   }
 
   async getSnapshot(): Promise<FinanceSnapshot> {

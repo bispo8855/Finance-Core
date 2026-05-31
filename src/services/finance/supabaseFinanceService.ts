@@ -1,4 +1,4 @@
-import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile } from './financeService';
+import { IFinanceService, FinanceSnapshot, CreateDocumentPayload, UserProfile, Workspace } from './financeService';
 import { supabase } from '@/lib/supabaseClient';
 import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 
@@ -18,19 +18,31 @@ export class SupabaseFinanceService implements IFinanceService {
       .eq('id', userId)
       .single();
     
-    if (error && error.code !== 'PGRST116') throw error; // PGRST116 is code for no rows found
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // Fallback: Create default profile if not exists
+        const { data: newProfile, error: insertError } = await supabase
+          .from('profiles')
+          .insert({ id: userId })
+          .select()
+          .single();
+        if (insertError) throw insertError;
+        return this.mapProfile(newProfile);
+      }
+      throw error;
+    }
     if (!data) return null;
 
-    return {
-      id: data.id,
-      onboardingCompleted: data.onboarding_completed
-    };
+    return this.mapProfile(data);
   }
 
   async updateProfile(payload: Partial<Omit<UserProfile, 'id'>>): Promise<UserProfile> {
     const userId = await this.getUserId();
     const updateData: Record<string, unknown> = {};
     if (payload.onboardingCompleted !== undefined) updateData.onboarding_completed = payload.onboardingCompleted;
+    if (payload.fullName !== undefined) updateData.full_name = payload.fullName;
+    if (payload.displayName !== undefined) updateData.display_name = payload.displayName;
+    if (payload.avatarInitials !== undefined) updateData.avatar_initials = payload.avatarInitials;
 
     const { data, error } = await supabase
       .from('profiles')
@@ -39,9 +51,119 @@ export class SupabaseFinanceService implements IFinanceService {
       .single();
 
     if (error) throw error;
+    return this.mapProfile(data);
+  }
+
+  async getActiveWorkspace(): Promise<Workspace | null> {
+    const userId = await this.getUserId();
+    
+    // Get the first workspace where user is a member
+    const { data, error } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, workspaces(*)')
+      .eq('user_id', userId)
+      .limit(1);
+      
+    if (error) throw error;
+    if (!data || data.length === 0) return null;
+    
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ws = (data[0] as any).workspaces;
+    if (!ws) return null;
+    return this.mapWorkspace(ws);
+  }
+
+  async updateActiveWorkspace(payload: Partial<Omit<Workspace, 'id' | 'ownerId'>>): Promise<Workspace> {
+    const userId = await this.getUserId();
+    const active = await this.getActiveWorkspace();
+    if (!active) throw new Error('Nenhum workspace ativo encontrado para atualizar');
+    
+    const updateData: Record<string, unknown> = {};
+    if (payload.name !== undefined) updateData.name = payload.name;
+    if (payload.legalName !== undefined) updateData.legal_name = payload.legalName;
+    if (payload.documentNumber !== undefined) updateData.document_number = payload.documentNumber;
+    if (payload.workspaceType !== undefined) updateData.workspace_type = payload.workspaceType;
+    if (payload.avatarInitials !== undefined) updateData.avatar_initials = payload.avatarInitials;
+
+    const { data, error } = await supabase
+      .from('workspaces')
+      .update(updateData)
+      .eq('id', active.id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return this.mapWorkspace(data);
+  }
+
+  async ensureDefaultWorkspaceForUser(): Promise<Workspace> {
+    const userId = await this.getUserId();
+    
+    // Check if membership row exists
+    const { data: memberRows, error: memberError } = await supabase
+      .from('workspace_members')
+      .select('workspace_id, workspaces(*)')
+      .eq('user_id', userId);
+      
+    if (memberError) throw memberError;
+    
+    if (memberRows && memberRows.length > 0) {
+      // Find workspaces
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws = (memberRows[0] as any).workspaces;
+      if (ws) {
+        return this.mapWorkspace(ws);
+      }
+    }
+    
+    // If not, create default workspace for user
+    const { data: newWS, error: wsError } = await supabase
+      .from('workspaces')
+      .insert({
+        owner_id: userId,
+        name: 'Minha Empresa',
+        workspace_type: 'business'
+      })
+      .select()
+      .single();
+      
+    if (wsError) throw wsError;
+    
+    // Add membership
+    const { error: memberInsertError } = await supabase
+      .from('workspace_members')
+      .insert({
+        workspace_id: newWS.id,
+        user_id: userId,
+        role: 'owner'
+      });
+      
+    if (memberInsertError) throw memberInsertError;
+    
+    return this.mapWorkspace(newWS);
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private mapProfile(row: Record<string, any>): UserProfile {
     return {
-      id: data.id,
-      onboardingCompleted: data.onboarding_completed
+      id: row.id,
+      onboardingCompleted: row.onboarding_completed,
+      fullName: row.full_name,
+      displayName: row.display_name,
+      avatarInitials: row.avatar_initials
+    };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private mapWorkspace(row: Record<string, any>): Workspace {
+    return {
+      id: row.id,
+      ownerId: row.owner_id,
+      name: row.name,
+      legalName: row.legal_name,
+      documentNumber: row.document_number,
+      workspaceType: row.workspace_type as 'business' | 'personal',
+      avatarInitials: row.avatar_initials
     };
   }
 
