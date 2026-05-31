@@ -6,6 +6,7 @@ interface AuthContextType {
   user: User | null;
   session: Session | null;
   isLoading: boolean;
+  isPasswordRecovery: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -13,6 +14,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   session: null,
   isLoading: true,
+  isPasswordRecovery: false,
   signOut: async () => {},
 });
 
@@ -20,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState(false);
 
   useEffect(() => {
     const isMockMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -67,6 +70,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         console.log('AuthContext: Sessão encerrada ou ausente após evento [', event, ']');
       }
+
+      if (event === 'PASSWORD_RECOVERY') {
+        // Sinaliza que estamos no fluxo de recuperação de senha.
+        // A sessão é setada normalmente para que updateUser() funcione,
+        // mas o flag impede que o router redirecione o usuário para o dashboard.
+        setIsPasswordRecovery(true);
+      } else {
+        setIsPasswordRecovery(false);
+      }
+
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
@@ -92,7 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, isLoading, signOut }}>
+    <AuthContext.Provider value={{ user, session, isLoading, isPasswordRecovery, signOut }}>
       {children}
     </AuthContext.Provider>
   );

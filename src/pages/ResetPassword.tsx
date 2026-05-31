@@ -76,6 +76,9 @@ export default function ResetPassword() {
         description: "Você já pode acessar sua conta com a nova senha.",
         variant: "default",
       });
+      // Encerra a sessão de recuperação para limpar o flag PASSWORD_RECOVERY
+      // e força o usuário a logar novamente com a nova senha
+      await supabase.auth.signOut();
       navigate('/login');
     }
   };

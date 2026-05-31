@@ -32,7 +32,7 @@ import { GlobalErrorBoundary } from "./components/shared/GlobalErrorBoundary";
 const PersonalLanding = lazy(() => import("./pages/PersonalLanding"));
 
 const Home = () => {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, isPasswordRecovery } = useAuth();
 
   if (isLoading) {
     return (
@@ -50,6 +50,11 @@ const Home = () => {
     );
   }
 
+  // Usuário chegou pelo link de reset — manda para a página de redefinição
+  if (isPasswordRecovery) {
+    return <Navigate to="/reset-password" replace />;
+  }
+
   if (!session) {
     return <Landing />;
   }
@@ -58,7 +63,7 @@ const Home = () => {
 };
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { session, isLoading } = useAuth();
+  const { session, isLoading, isPasswordRecovery } = useAuth();
   
   if (isLoading) {
     return (
@@ -69,6 +74,11 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         </div>
       </div>
     );
+  }
+
+  // Usuário chegou pelo link de reset — redireciona para a página de redefinição
+  if (isPasswordRecovery) {
+    return <Navigate to="/reset-password" replace />;
   }
   
   if (!session) {
