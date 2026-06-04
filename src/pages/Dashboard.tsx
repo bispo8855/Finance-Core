@@ -1,5 +1,6 @@
 import { useState, useEffect, useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Plus, BarChart3, Calculator } from 'lucide-react';
 import { 
@@ -45,6 +46,7 @@ const CardSkeleton = () => (
 
 function DashboardHeader({ monthStr }: { monthStr: string }) {
   const { data, isLoading } = useDashboardSummary(monthStr);
+  const { activeWorkspace } = useAuth();
   const statusGeral = data?.statusGeral;
   const mainInsight = data?.insights && data.insights.length > 0 ? data.insights[0] : null;
 
@@ -54,7 +56,7 @@ function DashboardHeader({ monthStr }: { monthStr: string }) {
         <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
           <span>Aurys</span>
           <span className="text-muted-foreground/30">|</span>
-          <span>Minha Empresa</span>
+          <span>{activeWorkspace?.name || 'Minha Empresa'}</span>
         </div>
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight text-foreground">Visão Geral</h1>

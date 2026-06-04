@@ -39,19 +39,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [activeWorkspace, setActiveWorkspace] = useState<Workspace | null>(null);
 
   const loadProfileAndWorkspace = async (userId: string) => {
+    console.log('AuthContext: Buscando perfil...');
     try {
-      console.log('AuthContext: Buscando perfil...');
-      const p = await financeService.getProfile();
-      setProfile(p);
+      const profileData = await financeService.getProfile();
+      console.log('AuthContext: Perfil carregado', profileData);
+      setProfile(profileData);
+    } catch (profileErr) {
+      console.error('AuthContext: Erro ao buscar perfil', profileErr);
+      setProfile(null);
+    }
 
-      console.log('AuthContext: Buscando/Garantindo workspace...');
-      const ws = await financeService.ensureDefaultWorkspaceForUser();
-      setActiveWorkspace(ws);
-    } catch (err) {
-      console.error('AuthContext: Erro ao carregar perfil e/ou workspace', err);
+    console.log('AuthContext: Garantindo workspace padrão...');
+    try {
+      const ensuredWorkspace = await financeService.ensureDefaultWorkspaceForUser();
+      console.log('ensureDefaultWorkspaceForUser result', ensuredWorkspace);
+    } catch (wsErr) {
+      console.error('AuthContext: Erro ao garantir workspace padrão', wsErr);
+    }
+
+    console.log('AuthContext: Buscando workspace ativo...');
+    try {
+      const activeWs = await financeService.getActiveWorkspace();
+      console.log('Workspace carregado no AuthContext', activeWs);
+      setActiveWorkspace(activeWs);
+    } catch (activeErr) {
+      console.error('AuthContext: Erro ao buscar workspace ativo', activeErr);
+      setActiveWorkspace(null);
     }
   };
-
   const refreshWorkspace = async () => {
     try {
       const ws = await financeService.getActiveWorkspace();
@@ -67,9 +82,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateActiveWorkspaceInContext = async (payload: Partial<Omit<Workspace, 'id' | 'ownerId'>>) => {
+    console.log('AuthContext: Atualizando workspace...', payload);
+    // If we don't have an active workspace yet, ensure one exists first
+    if (!activeWorkspace) {
+      console.log('AuthContext: activeWorkspace null, garantindo workspace padrão antes de atualizar');
+      const ws = await financeService.ensureDefaultWorkspaceForUser();
+      console.log('AuthContext: Workspace padrão garantido', ws);
+      setActiveWorkspace(ws);
+    }
     const updated = await financeService.updateActiveWorkspace(payload);
     setActiveWorkspace(updated);
   };
+
+  // Efeito secundário: Quando o ID do usuário mudar, busca as informações adicionais
+  // sem bloquear os callbacks síncronos do Supabase Auth.
+  useEffect(() => {
+    const isMockMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
+    if (isMockMode) return;
+
+    if (user) {
+      console.log('AuthContext: [Efeito] Carregando perfil e workspace para userId', user.id);
+      financeService.setUserId(user.id);
+      setIsLoading(true);
+      loadProfileAndWorkspace(user.id).finally(() => {
+        setIsLoading(false);
+      });
+    } else {
+      console.log('AuthContext: [Efeito] Nenhum usuário ativo, limpando perfil e workspace.');
+      financeService.setUserId(null);
+      setProfile(null);
+      setActiveWorkspace(null);
+    }
+  }, [user?.id]);
 
   useEffect(() => {
     const isMockMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -87,10 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const safetyTimer = setTimeout(() => {
       console.warn('AuthContext: Tempo limite de busca de sessão atingido. Forçando encerramento do loading.');
       setIsLoading(false);
-    }, 8000); // Elevamos para 8 segundos para dar tempo do perfil/workspace carregarem
+    }, 8000); // 8 segundos de segurança
 
     console.log('AuthContext: Iniciando busca de sessão inicial...');
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         console.error('AuthContext: Erro ao buscar sessão inicial', error);
         clearTimeout(safetyTimer);
@@ -98,22 +142,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      console.log('AuthContext: getSession finalizado. Session ativa:', !!session);
       setSession(session);
       setUser(session?.user ?? null);
 
-      if (session) {
-        console.log('AuthContext: Sessão inicial encontrada, carregando dados adicionais...');
-        await loadProfileAndWorkspace(session.user.id);
+      if (!session) {
+        clearTimeout(safetyTimer);
+        setIsLoading(false);
+      } else {
+        clearTimeout(safetyTimer);
       }
-      clearTimeout(safetyTimer);
-      setIsLoading(false);
     }).catch(err => {
       clearTimeout(safetyTimer);
       console.error('AuthContext: Falha catastrófica ao obter sessão', err);
       setIsLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log(`AuthContext: Mudança de estado detectada -> [${event}]`);
       setSession(session);
       setUser(session?.user ?? null);
@@ -124,13 +169,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setIsPasswordRecovery(false);
       }
 
-      if (session) {
-        await loadProfileAndWorkspace(session.user.id);
+      if (!session) {
+        clearTimeout(safetyTimer);
+        setIsLoading(false);
       } else {
-        setProfile(null);
-        setActiveWorkspace(null);
+        clearTimeout(safetyTimer);
       }
-      setIsLoading(false);
     });
 
     return () => {

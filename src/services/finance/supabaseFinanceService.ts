@@ -3,35 +3,60 @@ import { supabase } from '@/lib/supabaseClient';
 import { Category, BankAccount, Contact, FinancialDocument, Movement, Title } from '@/types/financial';
 
 export class SupabaseFinanceService implements IFinanceService {
+  private userId: string | null = null;
+
+  setUserId(id: string | null): void {
+    console.log('Service.setUserId chamado com:', id);
+    this.userId = id;
+  }
 
   private async getUserId(): Promise<string> {
-    const { data: { user } } = await supabase.auth.getUser();
+    if (this.userId) {
+      console.log('Service.getUserId: retornando userId em cache:', this.userId);
+      return this.userId;
+    }
+    console.log('Service.getUserId: nenhum userId em cache, iniciando busca...');
+    try {
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      console.log('Service.getUserId: getSession completado', { hasSession: !!session, error: sessionError });
+      if (session?.user) {
+        this.userId = session.user.id;
+        return this.userId;
+      }
+    } catch (e) {
+      console.error('Service.getUserId: Erro ao buscar getSession', e);
+    }
+    
+    console.log('Service.getUserId: buscando via getUser...');
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    console.log('Service.getUserId: getUser completado', { hasUser: !!user, error: userError });
     if (!user) throw new Error('Usuário não autenticado no Supabase');
-    return user.id;
+    this.userId = user.id;
+    return this.userId;
   }
 
   async getProfile(): Promise<UserProfile | null> {
+    console.log('Service.getProfile: obtendo userId...');
     const userId = await this.getUserId();
+    console.log('Service.getProfile: userId obtido', userId);
+
+    console.log('Service.getProfile: consultando banco...');
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
-      .single();
-    
+      .maybeSingle();
+
+    console.log('Service.getProfile: consulta banco completa', { data, error });
+
     if (error) {
-      if (error.code === 'PGRST116') {
-        // Fallback: Create default profile if not exists
-        const { data: newProfile, error: insertError } = await supabase
-          .from('profiles')
-          .insert({ id: userId })
-          .select()
-          .single();
-        if (insertError) throw insertError;
-        return this.mapProfile(newProfile);
-      }
+      console.error('Supabase getProfile error:', error);
       throw error;
     }
-    if (!data) return null;
+
+    if (!data) {
+      return null;
+    }
 
     return this.mapProfile(data);
   }
@@ -56,28 +81,56 @@ export class SupabaseFinanceService implements IFinanceService {
 
   async getActiveWorkspace(): Promise<Workspace | null> {
     const userId = await this.getUserId();
-    
-    // Get the first workspace where user is a member
+    console.log('Service.getActiveWorkspace: buscando para userId', userId);
+
+    // Try 1: via workspace_members JOIN
     const { data, error } = await supabase
       .from('workspace_members')
       .select('workspace_id, workspaces(*)')
       .eq('user_id', userId)
       .limit(1);
-      
-    if (error) throw error;
-    if (!data || data.length === 0) return null;
-    
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ws = (data[0] as any).workspaces;
-    if (!ws) return null;
-    return this.mapWorkspace(ws);
+
+    console.log('Service.getActiveWorkspace members query:', { data, error });
+
+    if (!error && data && data.length > 0) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const ws = (data[0] as any).workspaces;
+      if (ws) {
+        console.log('Service.getActiveWorkspace: encontrado via members', ws);
+        return this.mapWorkspace(ws);
+      }
+    }
+
+    // Fallback: query workspaces directly by owner_id
+    console.log('Service.getActiveWorkspace: fallback por owner_id');
+    const { data: ownedWs, error: ownedError } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('owner_id', userId)
+      .limit(1)
+      .maybeSingle();
+
+    console.log('Service.getActiveWorkspace fallback result:', { ownedWs, ownedError });
+
+    if (!ownedError && ownedWs) {
+      return this.mapWorkspace(ownedWs);
+    }
+
+    console.warn('Service.getActiveWorkspace: nenhum workspace encontrado');
+    return null;
   }
 
   async updateActiveWorkspace(payload: Partial<Omit<Workspace, 'id' | 'ownerId'>>): Promise<Workspace> {
+    console.log('Service.updateActiveWorkspace chamado com payload:', payload);
     const userId = await this.getUserId();
-    const active = await this.getActiveWorkspace();
-    if (!active) throw new Error('Nenhum workspace ativo encontrado para atualizar');
-    
+
+    // Try to find existing workspace, or ensure one exists
+    let active = await this.getActiveWorkspace();
+    if (!active) {
+      console.log('Service.updateActiveWorkspace: workspace não encontrado, criando...');
+      active = await this.ensureDefaultWorkspaceForUser();
+    }
+
     const updateData: Record<string, unknown> = {};
     if (payload.name !== undefined) updateData.name = payload.name;
     if (payload.legalName !== undefined) updateData.legal_name = payload.legalName;
@@ -85,6 +138,7 @@ export class SupabaseFinanceService implements IFinanceService {
     if (payload.workspaceType !== undefined) updateData.workspace_type = payload.workspaceType;
     if (payload.avatarInitials !== undefined) updateData.avatar_initials = payload.avatarInitials;
 
+    console.log('Service.updateActiveWorkspace: update em', active.id, updateData);
     const { data, error } = await supabase
       .from('workspaces')
       .update(updateData)
@@ -92,31 +146,54 @@ export class SupabaseFinanceService implements IFinanceService {
       .select()
       .single();
 
+    console.log('Service.updateActiveWorkspace result:', { data, error });
     if (error) throw error;
     return this.mapWorkspace(data);
   }
 
   async ensureDefaultWorkspaceForUser(): Promise<Workspace> {
     const userId = await this.getUserId();
-    
+    console.log('Service.ensureDefaultWorkspaceForUser: userId', userId);
+
     // Check if membership row exists
     const { data: memberRows, error: memberError } = await supabase
       .from('workspace_members')
       .select('workspace_id, workspaces(*)')
       .eq('user_id', userId);
-      
-    if (memberError) throw memberError;
-    
-    if (memberRows && memberRows.length > 0) {
-      // Find workspaces
+
+    console.log('Service.ensureDefault members check:', { memberRows, memberError });
+
+    if (!memberError && memberRows && memberRows.length > 0) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ws = (memberRows[0] as any).workspaces;
       if (ws) {
+        console.log('Service.ensureDefault: workspace já existe', ws);
         return this.mapWorkspace(ws);
       }
     }
-    
-    // If not, create default workspace for user
+
+    // Fallback: check if workspace exists by owner_id (orphan without membership)
+    const { data: existingWs, error: existingError } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('owner_id', userId)
+      .limit(1)
+      .maybeSingle();
+
+    console.log('Service.ensureDefault owner check:', { existingWs, existingError });
+
+    if (!existingError && existingWs) {
+      // Workspace exists but no membership — try to add it
+      const { error: memberInsertError } = await supabase
+        .from('workspace_members')
+        .insert({ workspace_id: existingWs.id, user_id: userId, role: 'owner' });
+      console.log('Service.ensureDefault re-add membership:', { memberInsertError });
+      // Don't throw on membership failure — return workspace anyway
+      return this.mapWorkspace(existingWs);
+    }
+
+    // Create new workspace
+    console.log('Service.ensureDefault: criando novo workspace...');
     const { data: newWS, error: wsError } = await supabase
       .from('workspaces')
       .insert({
@@ -126,20 +203,20 @@ export class SupabaseFinanceService implements IFinanceService {
       })
       .select()
       .single();
-      
+
+    console.log('Service.ensureDefault workspace create:', { newWS, wsError });
     if (wsError) throw wsError;
-    
-    // Add membership
+
+    // Add membership (don't throw if fails — RLS might block first insertion)
     const { error: memberInsertError } = await supabase
       .from('workspace_members')
-      .insert({
-        workspace_id: newWS.id,
-        user_id: userId,
-        role: 'owner'
-      });
-      
-    if (memberInsertError) throw memberInsertError;
-    
+      .insert({ workspace_id: newWS.id, user_id: userId, role: 'owner' });
+
+    if (memberInsertError) {
+      console.warn('Service.ensureDefault membership insert failed (RLS?):', memberInsertError);
+      // Still return the workspace — it was created successfully
+    }
+
     return this.mapWorkspace(newWS);
   }
 

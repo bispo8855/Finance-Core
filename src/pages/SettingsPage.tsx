@@ -44,6 +44,17 @@ export default function SettingsPage() {
 
   const handleSaveWorkspace = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('Salvar Negócio clicado');
+    console.log('Workspace form values', { workspaceName, legalName, documentNumber, workspaceInitials });
+    console.log('Active workspace antes de salvar', activeWorkspace);
+    if (!activeWorkspace) {
+      toast({
+        variant: "destructive",
+        title: "Workspace não carregado",
+        description: "Por favor, aguarde o workspace ser carregado antes de salvar.",
+      });
+      return;
+    }
     if (!workspaceName.trim()) {
       toast({
         variant: "destructive",
@@ -55,6 +66,12 @@ export default function SettingsPage() {
 
     setIsWorkspaceSaving(true);
     try {
+      console.log('Service.updateActiveWorkspace chamado', {
+        name: workspaceName,
+        legalName: legalName || null,
+        documentNumber: documentNumber || null,
+        avatarInitials: workspaceInitials || null,
+      });
       await updateActiveWorkspace({
         name: workspaceName,
         legalName: legalName || null,
@@ -135,7 +152,6 @@ export default function SettingsPage() {
                   placeholder="Ex: Rosa Charmosa"
                   value={workspaceName}
                   onChange={(e) => setWorkspaceName(e.target.value)}
-                  required
                 />
               </div>
 
@@ -177,7 +193,7 @@ export default function SettingsPage() {
               </div>
             </CardContent>
             <CardFooter className="pt-4 border-t bg-muted/20 flex justify-end">
-              <Button type="submit" disabled={isWorkspaceSaving} className="gap-2">
+              <Button type="submit" disabled={isWorkspaceSaving || !activeWorkspace || !workspaceName.trim()} className="gap-2">
                 {isWorkspaceSaving ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (

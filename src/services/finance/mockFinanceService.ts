@@ -38,6 +38,8 @@ const uid = () => 'id_' + Math.random().toString(36).substr(2, 9);
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export class MockFinanceService implements IFinanceService {
+  setUserId(id: string | null): void {}
+
   async getProfile(): Promise<UserProfile | null> {
     await delay(100);
     if (!mockProfile) return null;

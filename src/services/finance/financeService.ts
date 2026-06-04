@@ -37,6 +37,7 @@ export interface Workspace {
 }
 
 export interface IFinanceService {
+  setUserId(id: string | null): void;
   getSnapshot(): Promise<FinanceSnapshot>;
   
   getProfile(): Promise<UserProfile | null>;
