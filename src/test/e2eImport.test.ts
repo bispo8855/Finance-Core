@@ -227,6 +227,9 @@ describe('Validação End-to-End da Importação e Liquidação', () => {
   });
 
   it('deve rodar o fluxo completo de ponta a ponta sem falhas e com integridade de dados', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00Z'));
+
     // 1. Criar o buffer de dados simulando a planilha de vendas do Mercado Livre
     const headers = ['N.º de venda', 'Data da venda', 'Título do anuncio', 'Total (BRL)', 'Estado da venda', 'Liberação do dinheiro'];
     const rows = [

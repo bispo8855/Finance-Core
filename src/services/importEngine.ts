@@ -118,7 +118,7 @@ export async function processImportFile(
     colDesc = colProduct;
 
     // Também precisamos dos status de liquidação e datas de liberação para Mercado Livre Sales
-    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao']);
+    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao'], []);
     colReleaseDate = findBestCol(['data de liberacao', 'data de liquidação', 'release date', 'payout date', 'data de repasse', 'data de liberação', 'data de liquidação', 'liberação do dinheiro', 'liberacao do dinheiro', 'data de disponibilidade', 'disponivel em']);
   } else {
     colDate = findBestCol(['data da venda', 'data de liberacao', 'data de', 'data', 'date', 'criacao', 'horario', 'release_date']);
@@ -134,7 +134,7 @@ export async function processImportFile(
     colRef = findBestCol(['n.º do pacote', 'id do pacote', 'pacote', 'reference_id', 'n.º de venda', 'numero de venda', 'id do pedido', 'pedido', 'order', 'transacao', 'referencia', 'external_id', 'codigo', 'order_id']);
     if (colRef === -1) colRef = headers.findIndex(h => h === 'id');
     
-    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao']);
+    colStatus = findBestCol(['status', 'estado', 'state', 'estado da venda', 'situação', 'situacao'], []);
     colReleaseDate = findBestCol(['data de liberacao', 'data de liquidação', 'release date', 'payout date', 'data de repasse', 'data de liberação', 'data de liquidação', 'liberação do dinheiro', 'liberacao do dinheiro', 'data de disponibilidade', 'disponivel em']);
   }
 
@@ -224,8 +224,10 @@ export async function processImportFile(
     
     let hasReleaseDate = false;
     let isReleaseFuture = false;
+    let settlementDate: string | undefined;
     if (releaseDateStrRaw && releaseDateStrRaw.trim() !== '') {
-       const relD = new Date(parseDateString(releaseDateStrRaw, dateFormat));
+       settlementDate = parseDateString(releaseDateStrRaw, dateFormat);
+       const relD = new Date(settlementDate);
        if (!isNaN(relD.getTime())) {
           hasReleaseDate = true;
           // Ignorar hora para comparar apenas a data
@@ -234,16 +236,29 @@ export async function processImportFile(
           const relDateOnly = new Date(relD);
           relDateOnly.setHours(0,0,0,0);
           if (relDateOnly > today) isReleaseFuture = true;
+       } else {
+          settlementDate = undefined;
        }
     }
 
     const settlementInfo = inferSettlementLineStatus(desc, rawStatus, detectedType, amount, hasReleaseDate, isReleaseFuture);
+    const eventDate = dateStr;
+    const competenceDate = eventDate;
+    const paymentDate = settlementDate && !['predicted', 'review', 'blocked'].includes(settlementInfo.status)
+      ? (settlementDate || eventDate)
+      : undefined;
+    const dueDate = settlementInfo.status === 'predicted' && settlementDate ? settlementDate : undefined;
 
     parsedLines.push({
       id: primaryLineId,
       rawData: row,
       amount,
       date: dateStr,
+      eventDate,
+      competenceDate,
+      settlementDate,
+      paymentDate,
+      dueDate,
       description: desc,
       reference: ref,
       detectedType,
@@ -280,6 +295,11 @@ export async function processImportFile(
                 rawData: {},
                 amount: subAmount,
                 date: dateStr,
+                eventDate,
+                competenceDate,
+                settlementDate,
+                paymentDate,
+                dueDate,
                 description: h.charAt(0).toUpperCase() + h.slice(1).replace(' (brl)', ''),
                 reference: ref,
                 detectedType,
@@ -490,8 +510,10 @@ function inferSettlementLineStatus(
   hasReleaseDate: boolean,
   isReleaseFuture: boolean
 ): { status: 'predicted' | 'settled' | 'review', confidence: number, reason: string } {
-  const d = desc.toLowerCase();
-  const s = rawStatus.toLowerCase();
+  const normalize = (value: string) =>
+    value.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const d = normalize(desc);
+  const s = normalize(rawStatus);
   const combined = `${d} ${s}`;
 
   const reviewKeywords = [
@@ -528,6 +550,13 @@ function inferSettlementLineStatus(
   }
 
   const isIndicatingSettlement = hasKeyword || hasPago;
+  const hasReleaseKeyword = [
+    'liberado', 'liberacao', 'dinheiro liberado', 'valor liberado', 'released', 'settled', 'paid'
+  ].some(k => combined.includes(k));
+
+  if (hasReleaseKeyword && hasReleaseDate && !isReleaseFuture) {
+     return { status: 'settled', confidence: 0.9, reason: 'Status ou descrição indicam liberação/liquidação com data passada.' };
+  }
   
   if (['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(detectedType)) {
      if (hasReleaseDate && isReleaseFuture) {
@@ -855,12 +884,29 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     }
   }
 
+  const eventDate = primaryLine.eventDate || primaryLine.date || lines[0].date;
+  const competenceDate = primaryLine.competenceDate || eventDate;
+  const settlementDate = lines.find(l => l.settlementDate)?.settlementDate;
+  const linePaymentDate = primaryLine.paymentDate || lines.find(l => l.paymentDate)?.paymentDate;
+  const paymentDate = linePaymentDate
+    || ((eventSettlementStatus !== 'predicted' && eventSettlementStatus !== 'review' && eventSettlementStatus !== 'blocked')
+      ? (settlementDate || (eventSettlementStatus === 'settled' ? eventDate : undefined))
+      : undefined);
+  const dueDate = eventSettlementStatus === 'predicted'
+    ? (primaryLine.dueDate || settlementDate)
+    : undefined;
+
   return {
     id: generateId(),
     source,
     mode,
     title,
     date: lines[0].date,
+    eventDate,
+    competenceDate,
+    settlementDate,
+    paymentDate,
+    dueDate,
     grossAmount,
     feeAmount: feeAmount === 0 && grossAmount !== 0 && netAmount < grossAmount ? netAmount - grossAmount : feeAmount,
     freightAmount,

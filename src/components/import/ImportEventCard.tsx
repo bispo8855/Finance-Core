@@ -499,10 +499,10 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
               {event.reconciliationType === 'match' && event.matchConfidence === 'strong' && event.status !== 'ignorado' && (
                 <div className="mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
                   <p className="text-xs font-semibold text-emerald-800 flex items-center gap-1.5">
-                    <span className="text-base">✨</span> Conciliação Automática
+                    <span className="text-base">✨ Baixar título existente</span>
                   </p>
                   <p className="text-[11px] text-emerald-700 mt-1">
-                    Pedido {event.reference ? `#${event.reference}` : ''} localizado no sistema. Ao importar, o título previsto será liquidado automaticamente — sem criar duplicidade.
+                    Pedido {event.reference ? `#${event.reference}` : ''} localizado no sistema. Ao aprovar, o título será baixado existente.
                   </p>
                 </div>
               )}

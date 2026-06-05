@@ -366,14 +366,14 @@ export class SupabaseFinanceService implements IFinanceService {
     const newMovements = [];
     if (payNow && accountId) {
       const firstTitle = insertedTitles[0]; // parcel 1
-      const today = new Date().toISOString().split('T')[0];
+      const paymentDate = payload.paymentDate || payload.competenceDate;
       const { data: newMovement, error: movError } = await supabase
         .from('movements')
         .insert({
           user_id: userId,
           title_id: firstTitle.id,
           account_id: accountId,
-          payment_date: today,
+          payment_date: paymentDate,
           paid_amount: firstTitle.amount,
           fee_amount: 0,
           notes: ''
@@ -388,13 +388,13 @@ export class SupabaseFinanceService implements IFinanceService {
       const { error: updateTitleError } = await supabase
         .from('titles')
         .update({ 
-          settled_at: today,
+          settled_at: paymentDate,
           settlement_movement_id: newMovement.id
         })
         .eq('id', firstTitle.id);
 
       if (updateTitleError) throw updateTitleError;
-      insertedTitles[0].settled_at = today;
+      insertedTitles[0].settled_at = paymentDate;
       insertedTitles[0].settlement_movement_id = newMovement.id;
     }
 

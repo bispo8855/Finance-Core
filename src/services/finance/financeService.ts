@@ -14,6 +14,7 @@ export interface FinanceSnapshot {
 export type CreateDocumentPayload = Omit<FinancialDocument, 'id' | 'createdAt'> & {
   customInstallments?: { dueDate: string; value: number }[];
   firstDueDate?: string;
+  paymentDate?: string;
   sourceType?: string;
   importBatchId?: string;
 };

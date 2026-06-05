@@ -184,7 +184,6 @@ export function calculateStatementBalances(
     baseOpening = accounts.find(a => a.id === accountId)?.openingBalance || 0;
   }
 
-  let previousBalanceMovements = 0;
   let inflows = 0;
   let outflows = 0;
 
@@ -193,17 +192,14 @@ export function calculateStatementBalances(
     if (!isTargetAccount) return;
 
     const mDate = parseISO(m.paymentDate);
-    const mValue = m.valuePaid * (m.type === 'saida' ? -1 : 1);
 
-    if (start && mDate < start) {
-      previousBalanceMovements += mValue;
-    } else if ((!start || mDate >= start) && (!end || mDate <= end)) {
+    if ((!start || mDate >= start) && (!end || mDate <= end)) {
       if (m.type === 'entrada') inflows += m.valuePaid;
       else outflows += m.valuePaid;
     }
   });
 
-  const previousBalance = baseOpening + previousBalanceMovements;
+  const previousBalance = baseOpening;
   const finalBalance = previousBalance + inflows - outflows;
 
   return { previousBalance, inflows, outflows, finalBalance };

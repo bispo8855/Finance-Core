@@ -66,15 +66,16 @@ export function conciliateEvent(
     return defaultResult;
   }
 
-  // Filtrar títulos pendentes (previstos, lado receber/pagar)
-  const pendingTitles = snapshot.titles.filter(
-    t => t.status === 'previsto' && (t.side === 'receber' || t.side === 'pagar')
-  );
-
+  // Filtrar títulos pendentes (previstos, atrasado, vencido) sem títulos renegociados
+  const pendingTitles = snapshot.titles.filter(t => {
+    const eligibleStatus = ['previsto', 'atrasado', 'vencido'];
+    const notRenegotiated = t.status !== 'renegociado';
+    return eligibleStatus.includes(t.status) && notRenegotiated;
+  });
   if (pendingTitles.length === 0) {
     return {
       ...defaultResult,
-      explanation: 'Nenhum título previsto encontrado no sistema.'
+      explanation: 'Nenhum título elegível encontrado no sistema.'
     };
   }
 
@@ -384,7 +385,10 @@ function findStrongMatch(
 
     // 1. Match por reference_id estruturado (campo dedicado)
     if (doc.referenceId && doc.referenceId === ref) {
-      // Bonus: verificar se a source_type bate
+      // Verifica se o sentido (receber/pagar) corresponde ao valor do evento
+      if (event.netAmount > 0 && t.side !== 'receber') return false;
+      if (event.netAmount < 0 && t.side !== 'pagar') return false;
+      // Verifica família de origem, permite Mercado Livre/Pago equivalentes
       if (doc.sourceType) {
         return isSameSourceFamily(doc.sourceType, event.source);
       }
@@ -393,7 +397,11 @@ function findStrongMatch(
 
     // 2. Match pelo padrão formatado [#ID] na descrição
     const docDesc = doc.description || '';
-    if (docDesc.includes(`[#${ref}]`)) return true;
+    if (docDesc.includes(`[#${ref}]`)) {
+      if (event.netAmount > 0 && t.side !== 'receber') return false;
+      if (event.netAmount < 0 && t.side !== 'pagar') return false;
+      return true;
+    }
 
     // 3. Fallback: substring na descrição (para dados legados)
     return ref.length > 5 && docDesc.includes(ref);
@@ -403,7 +411,7 @@ function findStrongMatch(
     return {
       matchConfidence: 'strong',
       titleId: candidates[0].id,
-      explanation: `Conciliado via ID do pedido #${ref}. Título será liquidado automaticamente.`,
+      explanation: `Correspondência encontrada via ID do pedido #${ref}. Baixar título existente.`,
       candidates: candidates.map(t => formatCandidate(t, snapshot))
     };
   }
@@ -436,29 +444,51 @@ function findMediumMatch(
 
   const candidates = pendingTitles.filter(t => {
     // Match exato de valor (centavo a centavo)
-    const sameValue = Math.abs(t.value - eventValue) < 0.01;
-    if (!sameValue) return false;
+    // Valor exato ou diferença até R$0,05 (medium tolerance)
+    const valueDiff = Math.abs(t.value - eventValue);
+    const isExact = valueDiff < 0.01;
+    const isMedium = valueDiff <= 0.05;
+    if (!isExact && !isMedium) return false;
 
-    // Verificar se o documento pertence ao mesmo contato (mesma fonte/marketplace)
+    // Ensure side matches sign of event
+    if (event.netAmount > 0 && t.side !== 'receber') return false;
+    if (event.netAmount < 0 && t.side !== 'pagar') return false;
+
+    // Verify contact/source matching, allowing family equivalence for Mercado
     const doc = snapshot.documents.find(d => d.id === t.documentId);
     if (!doc) return false;
+    if (sourceContact) {
+      const sameFamily = isSameSourceFamily(sourceContact.name, doc.sourceType || '');
+      if (!sameFamily && doc.contactId !== sourceContact.id) return false;
+    }
 
-    // Priorizar match por contato (mesmo marketplace)
-    if (sourceContact && doc.contactId !== sourceContact.id) return false;
-
-    // Margem de data: ±5 dias para vendas, ±3 para banco
-    const dayMargin = event.mode === 'bank' ? 3 : 5;
+    // Date margin: ±30 days for Mercado family, otherwise default margins
+    let dayMargin = event.mode === 'bank' ? 3 : 5;
+    if (sourceContact && isSameSourceFamily(sourceContact.name, event.source)) {
+      dayMargin = 30;
+    }
     const tDate = new Date(t.dueDate);
     const diffDays = Math.abs(tDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
+    if (diffDays > dayMargin) return false;
 
-    return diffDays <= dayMargin;
+    return true;
   });
 
   if (candidates.length === 1) {
+    const strongCandidate = candidates[0];
+    // If value match is exact, promote to strong confidence
+    if (Math.abs(strongCandidate.value - eventValue) < 0.01) {
+      return {
+        matchConfidence: 'strong',
+        titleId: strongCandidate.id,
+        explanation: `Correspondência exata por valor (${formatCurrencySimple(eventValue)}) e data dentro de margem.`,
+        candidates: candidates.map(t => formatCandidate(t, snapshot))
+      };
+    }
     return {
       matchConfidence: 'medium',
       titleId: candidates[0].id,
-      explanation: `Correspondência sugerida por Valor (${formatCurrencySimple(eventValue)}) + Contato (${event.source}) + Data próxima. Confirme a conciliação.`,
+      explanation: `Correspondência sugerida por valor (${formatCurrencySimple(eventValue)}) + Contato (${event.source}) + Data próxima. Confirme a conciliação.`,
       candidates: candidates.map(t => formatCandidate(t, snapshot))
     };
   }

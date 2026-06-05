@@ -260,6 +260,9 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
   });
 
   it('deve validar todos os cenários da classificação semântica, proteção global e fechamento do caixa', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-20T12:00:00Z'));
+
     // 1. Criar o buffer de dados do extrato Mercado Pago/Mercado Livre
     // As colunas refletem um arquivo de extrato da conta
     const headers = ['release_date', 'transaction_type', 'reference_id', 'transaction_net_amount', 'partial_balance'];

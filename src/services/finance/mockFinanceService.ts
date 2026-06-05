@@ -124,7 +124,7 @@ export class MockFinanceService implements IFinanceService {
     
     const newTitles: Title[] = [];
     const newMovements: Movement[] = [];
-    const today = new Date().toISOString().split('T')[0];
+    const paymentDate = payload.paymentDate || payload.competenceDate;
     const initialDate = payload.firstDueDate || payload.competenceDate;
 
     for (let i = 0; i < numInstallments; i++) {
@@ -152,13 +152,13 @@ export class MockFinanceService implements IFinanceService {
           id: movementId,
           titleId,
           accountId,
-          paymentDate: today,
+          paymentDate,
           valuePaid: title.value,
           type: titleType === 'receber' ? 'entrada' : 'saida',
           feeAmount: 0,
           notes: ''
         });
-        title.settledAt = today;
+        title.settledAt = paymentDate;
         title.settlementMovementId = movementId;
       }
     }

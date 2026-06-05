@@ -5,6 +5,35 @@ import { settlementDaysBySource } from '@/config/settlementDays';
 
 const PENDING_CATEGORY_NAME = 'Movimentação Pendente de Classificação';
 
+const toISODate = (value?: string) => value ? value.split('T')[0] : undefined;
+
+const resolveCompetenceDate = (event: ImportEvent) =>
+  toISODate(event.competenceDate) ||
+  toISODate(event.eventDate) ||
+  toISODate(event.date) ||
+  new Date().toISOString().split('T')[0];
+
+const resolvePaymentDate = (event: ImportEvent) =>
+  toISODate(event.paymentDate) ||
+  toISODate(event.settlementDate) ||
+  toISODate(event.eventDate) ||
+  toISODate(event.date) ||
+  new Date().toISOString().split('T')[0];
+
+const resolveDueDate = (event: ImportEvent, source: ImportSource) => {
+  const explicitDueDate = toISODate(event.dueDate);
+  if (explicitDueDate) return explicitDueDate;
+
+  const settlementDate = toISODate(event.settlementDate);
+  if (settlementDate) return settlementDate;
+
+  const baseDate = toISODate(event.eventDate) || toISODate(event.date) || new Date().toISOString().split('T')[0];
+  const days = settlementDaysBySource[source] ?? settlementDaysBySource.default;
+  const dDate = new Date(baseDate + 'T12:00:00');
+  dDate.setDate(dDate.getDate() + days);
+  return dDate.toISOString().split('T')[0];
+};
+
 export async function persistApprovedEvents(events: ImportEvent[], source: ImportSource, batchId?: string) {
   // 1. Pegar a Conta Padrão (primeira ativa)
   const snapshot = await supabaseFinanceService.getSnapshot();
@@ -55,11 +84,26 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
     try {
        // --- CASO 1: CONCILIAÇÃO (Vínculo com Título Existente) ---
        if (event.reconciliationId && event.reconciliationType === 'match') {
+          // Verify if the title is already received/settled
+          const existingTitle = snapshot.titles.find(t => t.id === event.reconciliationId);
+          const alreadySettled = existingTitle && ['recebido', 'liquidado', 'quitado'].includes(existingTitle.status);
+          if (alreadySettled) {
+            // Mark as duplicate for UI warning, do not settle again
+            event.reconciliationType = 'duplicate';
+            if (!event.flags) event.flags = [];
+            if (!event.flags.includes('duplicate')) event.flags.push('duplicate');
+            // Optionally set a note
+            event.explanation = (event.explanation || '') + ' | Aviso: título já recebido.';
+            persistCount++;
+            continue; // Skip creating new document or settling
+          }
+
           if (event.settlementStatus === 'settled') {
+             const paymentDate = resolvePaymentDate(event);
              await supabaseFinanceService.settleTitle(
                 event.reconciliationId,
                 defaultAccount.id,
-                event.date.split('T')[0],
+                paymentDate,
                 Math.abs(event.netAmount),
                 `Conciliado automaticamente via importação (${source})${event.matchConfidence ? ` [Match: ${event.matchConfidence}]` : ''}`
              );
@@ -71,13 +115,9 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        }
 
        // --- CASO 2: CRIAÇÃO DE NOVO LANÇAMENTO (Avulso ou Venda) ---
-       const competence = event.date.split('T')[0]; // YYYY-MM-DD
-       
-       // Determinar vencimento baseado em settlement days (apenas para vendas futuras)
-       const days = settlementDaysBySource[source] ?? settlementDaysBySource.default;
-       const dDate = new Date(event.date);
-       dDate.setDate(dDate.getDate() + days);
-       const dueDate = dDate.toISOString().split('T')[0];
+       const competence = resolveCompetenceDate(event);
+       const paymentDate = resolvePaymentDate(event);
+       const dueDate = resolveDueDate(event, source);
 
        // Regra de Ouro: Tipos "Liquidados" nascem pagos e sem data futura
        const isLiquidation = ['repasse', 'liberacao', 'transferencia', 'deposito', 'antecipacao', 'entrada_liquidada'].includes(event.primaryType);
@@ -85,7 +125,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
        if (event.settlementStatus === 'review' && event.mode !== 'bank') {
           payNow = false;
        }
-       const finalDueDate = payNow ? competence : dueDate;
+       const finalDueDate = payNow ? paymentDate : dueDate;
 
        const isDespesa = event.netAmount < 0;
        
@@ -162,6 +202,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
          categoryId: effectiveCategoryId,
          competenceDate: competence,
          firstDueDate: finalDueDate,
+         paymentDate: payNow ? paymentDate : undefined,
          totalValue: Math.abs(event.netAmount),
          // Garante que o valor bruto seja o próprio netAmount para entradas líquidas, anulando possíveis taxas mal interpretadas
          grossAmount: event.primaryType === 'entrada_liquidada' ? Math.abs(event.netAmount) : Math.abs(event.grossAmount),
@@ -187,4 +228,3 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
 
   return persistCount;
 }
-

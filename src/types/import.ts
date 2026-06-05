@@ -14,6 +14,11 @@ export interface ImportRawLine {
   detectedType: 'venda' | 'taxa' | 'frete' | 'repasse' | 'antecipacao' | 'estorno' | 'chargeback' | 'ajuste' | 'transferencia' | 'liberacao' | 'deposito' | 'entrada_liquidada' | 'pendente_classificacao' | 'desconhecido';
   amount: number;
   date: string; // ISO string
+  eventDate?: string;
+  competenceDate?: string;
+  settlementDate?: string;
+  paymentDate?: string;
+  dueDate?: string;
   reference?: string; // ID do pedido ou transação na origem
   description: string;
   
@@ -28,6 +33,11 @@ export interface ImportEvent {
   mode: ImportMode;
   title: string;
   date: string; // ISO string
+  eventDate?: string;
+  competenceDate?: string;
+  settlementDate?: string;
+  paymentDate?: string;
+  dueDate?: string;
   
   // Breakdown
   grossAmount: number; // venda total (positivo)
