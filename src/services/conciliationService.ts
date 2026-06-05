@@ -458,8 +458,13 @@ function findMediumMatch(
     const doc = snapshot.documents.find(d => d.id === t.documentId);
     if (!doc) return false;
     if (sourceContact) {
-      const sameFamily = isSameSourceFamily(sourceContact.name, doc.sourceType || '');
-      if (!sameFamily && doc.contactId !== sourceContact.id) return false;
+      const docFamilySource = doc.sourceType || snapshot.contacts.find(c => c.id === doc.contactId)?.name || '';
+      const sameMarketplaceFamily =
+        isSameSourceFamily(event.source, docFamilySource) ||
+        isSameSourceFamily(sourceContact.name, docFamilySource) ||
+        isSameSourceFamily(sourceContact.name, event.source);
+
+      if (!sameMarketplaceFamily && doc.contactId !== sourceContact.id) return false;
     }
 
     // Date margin: ±30 days for Mercado family, otherwise default margins
@@ -488,7 +493,7 @@ function findMediumMatch(
     return {
       matchConfidence: 'medium',
       titleId: candidates[0].id,
-      explanation: `Correspondência sugerida por valor (${formatCurrencySimple(eventValue)}) + Contato (${event.source}) + Data próxima. Confirme a conciliação.`,
+      explanation: `Sugestão de correspondência por valor (${formatCurrencySimple(eventValue)}) + família marketplace (${event.source}) + data próxima. Requer revisão.`,
       candidates: candidates.map(t => formatCandidate(t, snapshot))
     };
   }
