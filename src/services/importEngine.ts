@@ -757,6 +757,14 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
 
   if (netAmount > 0) {
     // --- ENTRADAS ---
+    if (mode === 'sales' && finalPrimaryType === 'venda' && (source === 'Mercado Livre' || source === 'Mercado Pago')) {
+      detectedTypeLabel = 'Venda';
+      suggestedCategoryName = 'Venda de Produtos';
+      classificationReason = 'Venda importada do relatório de vendas do marketplace';
+      classificationConfidence = 'alta';
+      suggestedAction = 'Criar título a receber com base na data prevista de recebimento.';
+      initialClassificationStatus = 'classified';
+    } else
     if (descLower.includes('liberacao de dinheiro') || finalPrimaryType === 'liberacao') {
       detectedTypeLabel = 'Liberação de dinheiro';
       suggestedCategoryName = 'Venda de Produtos';

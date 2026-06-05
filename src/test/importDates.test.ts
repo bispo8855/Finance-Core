@@ -151,6 +151,37 @@ describe('Import date semantics', () => {
     expect(title.settledAt).toBe('2026-06-15');
   });
 
+  it('classifies a Mercado Livre predicted sale as receivable without cash movement', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-10T12:00:00Z'));
+
+    const buffer = buildWorkbook(
+      ['Numero de venda', 'Data da venda', 'Produto', 'Total (BRL)', 'Status', 'Data de liberacao'],
+      [['2000012785036885', '02/05/2026', 'Sandália Feminina', '99,32', 'Pendente', '17/05/2026']]
+    );
+
+    const batch = await processImportFile(buffer, 'ml.xlsx', 'xlsx', 'Mercado Livre', 'sales');
+    const event = batch.events[0];
+
+    expect(event.primaryType).toBe('venda');
+    expect(event.suggestedCategoryName).toBe('Venda de Produtos');
+    expect(event.classificationStatus).toBe('classified');
+    expect(event.settlementStatus).toBe('predicted');
+    expect(event.dueDate?.startsWith('2026-05-17')).toBe(true);
+    expect(event.paymentDate).toBeUndefined();
+
+    event.status = 'aprovado';
+    await persistApprovedEvents([event], 'Mercado Livre', batch.id);
+    const snapshot = await supabaseFinanceService.getSnapshot();
+    const doc = snapshot.documents.find(d => d.referenceId === '2000012785036885')!;
+    const title = snapshot.titles.find(t => t.documentId === doc.id)!;
+
+    expect(doc.type).toBe('venda');
+    expect(doc.competenceDate).toBe('2026-05-02');
+    expect(title.dueDate).toBe('2026-05-17');
+    expect(snapshot.movements.find(m => m.titleId === title.id)).toBeUndefined();
+  });
+
   it('keeps predicted Mercado Livre sales unpaid and uses known release date as due date', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-06-04T12:00:00Z'));
