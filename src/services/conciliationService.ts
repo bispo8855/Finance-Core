@@ -455,23 +455,29 @@ function findMediumMatch(
     if (event.netAmount < 0 && t.side !== 'pagar') return false;
 
     // Verify contact/source matching, allowing family equivalence for Mercado
-    const doc = snapshot.documents.find(d => d.id === t.documentId);
-    if (!doc) return false;
-    if (sourceContact) {
-      const docFamilySource = doc.sourceType || snapshot.contacts.find(c => c.id === doc.contactId)?.name || '';
-      const sameMarketplaceFamily =
-        isSameSourceFamily(event.source, docFamilySource) ||
-        isSameSourceFamily(sourceContact.name, docFamilySource) ||
-        isSameSourceFamily(sourceContact.name, event.source);
+const doc = snapshot.documents.find(d => d.id === t.documentId);
+if (!doc) return false;
 
-      if (!sameMarketplaceFamily && doc.contactId !== sourceContact.id) return false;
-    }
+const docContactName = snapshot.contacts.find(c => c.id === doc.contactId)?.name || '';
+const docFamilySource = doc.sourceType || docContactName || '';
+const eventSource = event.source || '';
 
-    // Date margin: ±30 days for Mercado family, otherwise default margins
-    let dayMargin = event.mode === 'bank' ? 3 : 5;
-    if (sourceContact && isSameSourceFamily(sourceContact.name, event.source)) {
-      dayMargin = 30;
-    }
+const sameMarketplaceFamily =
+  isSameSourceFamily(eventSource, docFamilySource) ||
+  isSameSourceFamily(eventSource, docContactName) ||
+  (sourceContact
+    ? isSameSourceFamily(sourceContact.name, docFamilySource) ||
+      isSameSourceFamily(sourceContact.name, docContactName) ||
+      isSameSourceFamily(sourceContact.name, eventSource)
+    : false);
+
+if (sourceContact && !sameMarketplaceFamily && doc.contactId !== sourceContact.id) return false;
+
+// Date margin: ±30 days for Mercado family, otherwise default margins
+let dayMargin = event.mode === 'bank' ? 3 : 5;
+if (sameMarketplaceFamily || isSameSourceFamily(eventSource, docFamilySource) || isSameSourceFamily(eventSource, docContactName)) {
+  dayMargin = 30;
+}
     const tDate = new Date(t.dueDate);
     const diffDays = Math.abs(tDate.getTime() - eventDate.getTime()) / (1000 * 60 * 60 * 24);
     if (diffDays > dayMargin) return false;
@@ -480,23 +486,13 @@ function findMediumMatch(
   });
 
   if (candidates.length === 1) {
-    const strongCandidate = candidates[0];
-    // If value match is exact, promote to strong confidence
-    if (Math.abs(strongCandidate.value - eventValue) < 0.01) {
-      return {
-        matchConfidence: 'strong',
-        titleId: strongCandidate.id,
-        explanation: `Correspondência exata por valor (${formatCurrencySimple(eventValue)}) e data dentro de margem.`,
-        candidates: candidates.map(t => formatCandidate(t, snapshot))
-      };
-    }
-    return {
-      matchConfidence: 'medium',
-      titleId: candidates[0].id,
-      explanation: `Sugestão de correspondência por valor (${formatCurrencySimple(eventValue)}) + família marketplace (${event.source}) + data próxima. Requer revisão.`,
-      candidates: candidates.map(t => formatCandidate(t, snapshot))
-    };
-  }
+  return {
+    matchConfidence: 'medium',
+    titleId: candidates[0].id,
+    explanation: `Sugestão de correspondência por valor (${formatCurrencySimple(eventValue)}) + família marketplace (${event.source}) + data próxima. Requer revisão.`,
+    candidates: candidates.map(t => formatCandidate(t, snapshot))
+  };
+}
 
   if (candidates.length > 1) {
     return {
