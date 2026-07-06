@@ -133,6 +133,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }, 8000); // 8 segundos de segurança
 
+    // Detecta token de recuperação diretamente na URL (fallback para PKCE e implicit flow).
+    // Garante que isPasswordRecovery seja true antes de qualquer redirect, independente
+    // da ordem dos eventos do Supabase.
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const searchParams = new URLSearchParams(window.location.search);
+    if (hashParams.get('type') === 'recovery' || searchParams.get('type') === 'recovery') {
+      setIsPasswordRecovery(true);
+    }
+
     console.log('AuthContext: Iniciando busca de sessão inicial...');
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
@@ -165,7 +174,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (event === 'PASSWORD_RECOVERY') {
         setIsPasswordRecovery(true);
-      } else {
+      } else if (event !== 'SIGNED_IN') {
+        // Não reseta em SIGNED_IN: pode ser disparado logo após PASSWORD_RECOVERY,
+        // o que sobrescreveria o flag e redirecionaria o usuário ao dashboard.
         setIsPasswordRecovery(false);
       }
 

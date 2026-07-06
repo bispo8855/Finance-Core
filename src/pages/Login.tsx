@@ -109,10 +109,19 @@ export default function Login() {
     setIsResetLoading(false);
 
     if (error) {
+      const raw = error.message.toLowerCase();
+      let friendly: string;
+      if (raw.includes('rate limit')) {
+        friendly = 'Muitas tentativas de recuperação foram feitas em pouco tempo. Aguarde alguns minutos antes de tentar novamente.';
+      } else if (raw.includes('invalid') && raw.includes('email')) {
+        friendly = 'Digite um e-mail válido.';
+      } else {
+        friendly = 'Não foi possível enviar o link de redefinição agora. Tente novamente em alguns minutos.';
+      }
       toast({
         variant: "destructive",
         title: "Erro ao solicitar recuperação",
-        description: error.message,
+        description: friendly,
       });
     } else {
       toast({

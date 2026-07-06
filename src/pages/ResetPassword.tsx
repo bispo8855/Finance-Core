@@ -12,22 +12,49 @@ export default function ResetPassword() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // 'checking' — aguardando a sessão do Supabase ser estabelecida
+  // 'ready'    — sessão de recuperação ativa, pode salvar nova senha
+  // 'invalid'  — link inválido/expirado
+  const [sessionState, setSessionState] = useState<'checking' | 'ready' | 'invalid'>('checking');
+
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Escuta a autenticação - O Supabase dispara o evento 'PASSWORD_RECOVERY'
+    // O Supabase processa o token/code da URL de forma assíncrona.
+    // Precisamos aguardar o evento para garantir que a sessão está ativa
+    // antes de permitir que o usuário salve a nova senha.
+
+    // Verifica se já há sessão (caso o token já tenha sido processado)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) setSessionState('ready');
+    });
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
-          console.log('Sessão de recuperação ativa', session);
+        if (event === 'PASSWORD_RECOVERY' && session) {
+          // Fluxo implicit: evento correto, sessão de recuperação ativa
+          setSessionState('ready');
+        } else if (event === 'SIGNED_IN' && session) {
+          // Fluxo PKCE: dispara SIGNED_IN em vez de PASSWORD_RECOVERY.
+          // Confiamos que chegamos aqui via link de recuperação (a URL tem type=recovery ou code=).
+          const isRecoveryUrl =
+            window.location.hash.includes('type=recovery') ||
+            window.location.search.includes('code=');
+          if (isRecoveryUrl) setSessionState('ready');
         }
       }
     );
 
+    // Timeout de segurança: se após 10 s não houver sessão, link expirado
+    const timeout = setTimeout(() => {
+      setSessionState(prev => prev === 'checking' ? 'invalid' : prev);
+    }, 10_000);
+
     return () => {
       subscription.unsubscribe();
+      clearTimeout(timeout);
     };
   }, []);
 
@@ -35,13 +62,12 @@ export default function ResetPassword() {
     e.preventDefault();
     setError(null);
 
-    // Validação básica
     if (password.length < 6) {
-      setError('A senha deve ter no mínimo 6 caracteres.');
+      setError('A senha precisa ter pelo menos 6 caracteres.');
       return;
     }
     if (password !== confirmPassword) {
-      setError('As senhas não coincidem.');
+      setError('As senhas não conferem.');
       return;
     }
 
@@ -49,50 +75,70 @@ export default function ResetPassword() {
 
     const isMockMode = !import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-    // No modo offline simulamos o sucesso e voltamos para o login
     if (isMockMode) {
       setTimeout(() => {
-        toast({
-          title: "Senha atualizada (Mock Mode)",
-          description: "Sua senha foi alterada com sucesso.",
-          variant: "default",
-        });
+        toast({ title: "Senha atualizada (Mock Mode)", description: "Sua senha foi alterada com sucesso." });
         navigate('/login');
       }, 800);
       return;
     }
 
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: password
-    });
+    const { error: updateError } = await supabase.auth.updateUser({ password });
 
     setIsLoading(false);
 
     if (updateError) {
-      setError(updateError.message);
+      // Sessão de recuperação ausente/expirada — link inválido
+      if (/session|missing|expired|invalid|token/i.test(updateError.message)) {
+        setSessionState('invalid');
+      } else {
+        setError('Não foi possível alterar a senha agora. Tente novamente em alguns minutos.');
+      }
     } else {
       toast({
-        title: "Senha alterada com sucesso!",
-        description: "Você já pode acessar sua conta com a nova senha.",
-        variant: "default",
+        title: "Senha alterada com sucesso.",
+        description: "Entre novamente com a sua nova senha.",
       });
-      // Encerra a sessão de recuperação para limpar o flag PASSWORD_RECOVERY
-      // e força o usuário a logar novamente com a nova senha
       await supabase.auth.signOut();
       navigate('/login');
     }
   };
 
+  // Enquanto aguarda a sessão do Supabase ser processada
+  if (sessionState === 'checking') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="flex items-center gap-3 text-muted-foreground">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span>Verificando link de recuperação...</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Link expirado ou inválido
+  if (sessionState === 'invalid') {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-sm space-y-8 text-center">
+          <h1 className="text-2xl font-bold tracking-tight">Link expirado ou inválido</h1>
+          <p className="text-muted-foreground text-sm">
+            Este link expirou ou é inválido. Solicite uma nova redefinição de senha.
+          </p>
+          <Button className="w-full" onClick={() => navigate('/login')}>
+            Voltar ao login
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-8">
         <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold tracking-tight">
-            Criar nova senha
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            Digite sua nova senha de acesso
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Criar nova senha</h1>
+          <p className="text-muted-foreground text-sm">Digite sua nova senha de acesso</p>
         </div>
 
         <div className="bg-card border shadow-sm rounded-xl p-6">
@@ -109,7 +155,7 @@ export default function ResetPassword() {
                 placeholder="Mínimo de 6 caracteres"
               />
             </div>
-            
+
             <div className="space-y-2">
               <Label htmlFor="confirm-password">Confirmar nova senha</Label>
               <Input
@@ -123,15 +169,11 @@ export default function ResetPassword() {
               />
             </div>
 
-            {error && (
-              <p className="text-sm text-destructive">
-                {error}
-              </p>
-            )}
+            {error && <p className="text-sm text-destructive">{error}</p>}
 
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Salvar nova senha
+              Alterar senha
             </Button>
           </form>
 
