@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { filterCategoriesForDocumentType, filterContactsForDocumentType } from '@/domain/finance/helpers';
-import { DocumentType } from '@/types/financial';
+import { DocumentType, CategoryType } from '@/types/financial';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { useCreateDocument } from '@/hooks/finance/useCreateDocument';
 import { useUpdateDocument } from '@/hooks/finance/useUpdateDocument';
 import { useSettleTitle } from '@/hooks/finance/useSettleTitle';
-import { useCreateContact } from '@/hooks/finance/useCatalogs';
+import { useCreateContact, useCreateCategory } from '@/hooks/finance/useCatalogs';
 import { useToast } from '@/components/ui/use-toast';
 import { cn } from '@/lib/utils';
 
@@ -33,6 +33,7 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
   const { mutateAsync: createDocument, isPending: isCreating } = useCreateDocument();
   const { mutateAsync: updateDocument, isPending: isUpdating } = useUpdateDocument();
   const { mutateAsync: createContact, isPending: creatingContact } = useCreateContact();
+  const { mutateAsync: createCategory, isPending: creatingCategory } = useCreateCategory();
   const { mutateAsync: settleTitle } = useSettleTitle();
   const { toast } = useToast();
 
@@ -68,6 +69,11 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
   const [openContactSelect, setOpenContactSelect] = useState(false);
   const [contactSearch, setContactSearch] = useState('');
   const [showCreateContact, setShowCreateContact] = useState(false);
+
+  const [openCategorySelect, setOpenCategorySelect] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+  const [showCreateCategory, setShowCreateCategory] = useState(false);
+  const [newCategoryType, setNewCategoryType] = useState<CategoryType>('despesa');
 
   const lastInitRef = useRef<string | null | undefined>(undefined); // undefined = never, null = 'new'
   const isOpeningRef = useRef(false);
@@ -228,6 +234,9 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
   const exactContactMatch = filteredContacts.some(
     c => c.name.toLowerCase() === contactSearch.toLowerCase().trim()
   );
+  const exactCategoryMatch = filteredCategories.some(
+    c => c.name.toLowerCase() === categorySearch.toLowerCase().trim()
+  );
 
   const handleOpenCreateContact = (nameToCreate: string) => {
     setContactSearch(nameToCreate);
@@ -250,6 +259,26 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
       // Não limpamos o restante do form, o componente mantém o estado
     } catch (e) {
       toast({ title: 'Erro', description: 'Erro ao criar contato.', variant: 'destructive' });
+    }
+  };
+
+  const handleOpenCreateCategory = (nameToCreate: string) => {
+    setCategorySearch(nameToCreate);
+    setNewCategoryType(isReceita ? 'receita' : 'despesa');
+    setShowCreateCategory(true);
+    setOpenCategorySelect(false);
+  };
+
+  const handleCreateCategorySubmit = async () => {
+    const name = categorySearch.trim();
+    if (!name) return;
+    try {
+      const result = await createCategory({ name, type: newCategoryType, isActive: true });
+      setCategoryId(result.id);
+      setShowCreateCategory(false);
+      setCategorySearch('');
+    } catch (e) {
+      toast({ title: 'Erro', description: 'Erro ao criar categoria.', variant: 'destructive' });
     }
   };
 
@@ -409,7 +438,7 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
             <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">2. Com quem + categoria</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5 bg-card shadow-sm p-5 rounded-xl border">
               <div className="space-y-2">
-                <Label>{isReceita ? 'Cliente' : 'Fornecedor'} <span className="text-destructive">*</span></Label>
+                <Label>{isReceita ? 'Cliente / Origem' : 'Fornecedor / Destino'} <span className="text-destructive">*</span></Label>
                 <Popover open={openContactSelect} onOpenChange={setOpenContactSelect}>
                   <PopoverTrigger asChild>
                     <Button id="contact-trigger" variant="outline" role="combobox" aria-expanded={openContactSelect} className="w-full justify-between font-normal bg-background">
@@ -449,12 +478,39 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
 
               <div className="space-y-2">
                 <Label>Categoria <span className="text-destructive">*</span></Label>
-                <Select value={categoryId} onValueChange={setCategoryId}>
-                  <SelectTrigger className="bg-background"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {filteredCategories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Popover open={openCategorySelect} onOpenChange={setOpenCategorySelect}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" aria-expanded={openCategorySelect} className="w-full justify-between font-normal bg-background">
+                      {categoryId ? filteredCategories.find(c => c.id === categoryId)?.name || activeCategories.find(c => c.id === categoryId)?.name || 'Selecione...' : 'Selecione...'}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                    <Command>
+                      <CommandInput placeholder="Buscar categoria..." value={categorySearch} onValueChange={setCategorySearch} />
+                      <CommandList>
+                        <CommandEmpty className="px-2 py-3 text-sm text-center">
+                          <span className="text-muted-foreground block mb-2">Nenhuma categoria encontrada.</span>
+                          <Button variant="ghost" size="sm" className="w-full justify-start text-primary" onClick={() => handleOpenCreateCategory(categorySearch)}>
+                            <Plus className="mr-2 h-4 w-4" /> Criar categoria{categorySearch.trim() ? `: "${categorySearch}"` : ''}
+                          </Button>
+                        </CommandEmpty>
+                        <CommandGroup>
+                          {filteredCategories.map(category => (
+                            <CommandItem key={category.id} value={category.name} onSelect={() => { setCategoryId(category.id); setOpenCategorySelect(false); setCategorySearch(''); }}>
+                              <Check className={`mr-2 h-4 w-4 ${categoryId === category.id ? 'opacity-100' : 'opacity-0'}`} /> {category.name}
+                            </CommandItem>
+                          ))}
+                          {!exactCategoryMatch && categorySearch.trim() !== '' && (
+                            <CommandItem value={`__create__${categorySearch}`} onSelect={() => handleOpenCreateCategory(categorySearch)} className="text-primary font-medium mt-1">
+                              <Plus className="mr-2 h-4 w-4" /> Criar categoria: "{categorySearch}"
+                            </CommandItem>
+                          )}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
           </div>
@@ -728,6 +784,47 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
             <Button variant="outline" onClick={() => setShowCreateContact(false)} disabled={creatingContact}>Cancelar</Button>
             <Button onClick={handleCreateContactSubmit} disabled={!contactSearch.trim() || creatingContact}>
               {creatingContact ? 'Salvando...' : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showCreateCategory} onOpenChange={setShowCreateCategory}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Criar Categoria</DialogTitle>
+            <DialogDescription>A categoria será salva e selecionada automaticamente.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Ex: Vendas Online" />
+            </div>
+            <div className="space-y-2">
+              <Label>Tipo</Label>
+              <Select value={newCategoryType} onValueChange={v => setNewCategoryType(v as CategoryType)}>
+                <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {isReceita ? (
+                    <>
+                      <SelectItem value="receita">Receita</SelectItem>
+                      <SelectItem value="investimento">Investimento</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="despesa">Despesa</SelectItem>
+                      <SelectItem value="custo">Custo</SelectItem>
+                      <SelectItem value="financeiro">Financeiro</SelectItem>
+                    </>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreateCategory(false)} disabled={creatingCategory}>Cancelar</Button>
+            <Button onClick={handleCreateCategorySubmit} disabled={!categorySearch.trim() || creatingCategory}>
+              {creatingCategory ? 'Salvando...' : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>
