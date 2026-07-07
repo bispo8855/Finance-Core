@@ -7,10 +7,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Tags, Plus, Trash2, Pencil } from 'lucide-react';
 import { CategoryType, Category, DREClassification } from '@/types/financial';
 import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '@/hooks/finance/useCatalogs';
+import { categoryTypeLabels } from '@/domain/finance/categoryTypes';
 
-const typeLabels: Record<CategoryType, string> = {
-  receita: 'Receita', custo: 'Custo', despesa: 'Despesa', investimento: 'Investimento', financeiro: 'Financeiro',
-};
+const typeLabels = categoryTypeLabels;
 const typeColors: Record<CategoryType, string> = {
   receita: 'bg-success-subtle text-positive',
   custo: 'bg-warning-subtle text-warning',

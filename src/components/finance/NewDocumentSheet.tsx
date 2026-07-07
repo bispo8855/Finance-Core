@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { filterCategoriesForDocumentType, filterContactsForDocumentType } from '@/domain/finance/helpers';
+import { categoryTypeLabels } from '@/domain/finance/categoryTypes';
 import { DocumentType, CategoryType } from '@/types/financial';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -801,24 +802,16 @@ export function NewDocumentSheet({ open, onOpenChange, onSuccess, defaultSide, e
               <Input value={categorySearch} onChange={e => setCategorySearch(e.target.value)} placeholder="Ex: Vendas Online" />
             </div>
             <div className="space-y-2">
-              <Label>Tipo</Label>
+              <Label>Natureza da categoria</Label>
               <Select value={newCategoryType} onValueChange={v => setNewCategoryType(v as CategoryType)}>
                 <SelectTrigger className="bg-background"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {isReceita ? (
-                    <>
-                      <SelectItem value="receita">Receita</SelectItem>
-                      <SelectItem value="investimento">Investimento</SelectItem>
-                    </>
-                  ) : (
-                    <>
-                      <SelectItem value="despesa">Despesa</SelectItem>
-                      <SelectItem value="custo">Custo</SelectItem>
-                      <SelectItem value="financeiro">Financeiro</SelectItem>
-                    </>
-                  )}
+                  {Object.entries(categoryTypeLabels).map(([k, v]) => (
+                    <SelectItem key={k} value={k}>{v}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">Escolha como o Aurys deve tratar essa categoria nas análises.</p>
             </div>
           </div>
           <DialogFooter>
