@@ -341,9 +341,9 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(evPixKnown.classificationConfidence).toBe('alta');
     expect(evPixKnown.classificationStatus).toBe('classified');
 
-    // Requisito 2 & 9: Pix enviado para empresa com histórico/descrição de produto → Compra de mercadoria
+    // Requisito 2 & 9: Pix enviado para empresa com histórico/descrição de produto → Compra de Mercadorias
     const evPixProd = processedEvents.find(e => e.reference === 'REF_PIX_PJ_PROD')!;
-    expect(evPixProd.suggestedCategoryName).toBe('Compra de mercadoria');
+    expect(evPixProd.suggestedCategoryName).toBe('Compra de Mercadorias');
     expect(evPixProd.classificationConfidence).toBe('alta');
     expect(evPixProd.classificationStatus).toBe('classified');
 
@@ -422,7 +422,7 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(catSupplier.type).toBe('custo');
     expect(catSupplier.dreClassification).toBe('custo_variavel');
 
-    const catPurchase = categoriesDB.find(c => c.name === 'Compra de mercadoria')!;
+    const catPurchase = categoriesDB.find(c => c.name === 'Compra de Mercadorias')!;
     expect(catPurchase).toBeDefined();
     expect(catPurchase.type).toBe('custo');
     expect(catPurchase.dreClassification).toBe('custo_variavel');

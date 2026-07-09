@@ -303,7 +303,7 @@ export function conciliateBatch(
         
         if (isPJ) {
           if (hasProductKeyword) {
-            updated.suggestedCategoryName = 'Compra de mercadoria';
+            updated.suggestedCategoryName = 'Compra de Mercadorias';
             updated.classificationConfidence = 'alta';
             updated.classificationStatus = 'classified';
             updated.classificationReason = 'Pix enviado para empresa com evidência de fornecimento de mercadoria.';

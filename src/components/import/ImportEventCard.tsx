@@ -428,12 +428,13 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                   
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'taxa_marketplace', label: '💳 Taxa Marketplace', desc: 'Comissão, tarifa de venda' },
-                      { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado' },
-                      { id: 'ajuste', label: '🔄 Ajuste / Compensação', desc: 'Correção, estorno parcial' },
-                      { id: 'despesa', label: '📉 Despesa Operacional', desc: 'Custo, investimento' },
-                      { id: 'receita', label: '📈 Receita', desc: 'Entrada positiva' },
-                      { id: 'outro', label: '📋 Outro', desc: 'Classificar depois' },
+                      { id: 'taxa_marketplace', label: '💳 Taxa Marketplace', desc: 'Comissão, tarifa de venda', categoryName: 'Tarifa', primaryType: 'outros' as const },
+                      { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado', categoryName: 'Retenção', primaryType: 'outros' as const },
+                      { id: 'ajuste', label: '🔄 Ajuste / Compensação', desc: 'Correção, estorno parcial', categoryName: 'Ajuste Mercado Pago', primaryType: 'outros' as const },
+                      { id: 'compra_mercadorias', label: '🛒 Compra de Mercadorias', desc: 'Estoque, produtos para revenda, matéria-prima', categoryName: 'Compra de Mercadorias', primaryType: 'outros' as const },
+                      { id: 'despesa', label: '📉 Despesa Operacional', desc: 'Contas, serviços e gastos para manter a operação', categoryName: 'Despesa Operacional', primaryType: 'outros' as const },
+                      { id: 'receita', label: '📈 Receita', desc: 'Entrada positiva', categoryName: 'Recebimentos via Pix', primaryType: 'venda' as const },
+                      { id: 'outro', label: '📋 Outro', desc: 'Classificar depois', categoryName: undefined, primaryType: 'outros' as const },
                     ].map(opt => (
                       <button
                         key={opt.id}
@@ -443,12 +444,8 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                           if (onUpdateEvent) {
                             onUpdateEvent(event.id, {
                               classificationStatus: 'classified',
-                              primaryType: opt.id === 'taxa_marketplace' ? 'outros' 
-                                : opt.id === 'retencao' ? 'outros'
-                                : opt.id === 'ajuste' ? 'outros'
-                                : opt.id === 'despesa' ? 'outros'
-                                : opt.id === 'receita' ? 'venda'
-                                : 'outros',
+                              primaryType: opt.primaryType,
+                              ...(opt.categoryName ? { suggestedCategoryName: opt.categoryName } : {}),
                               explanation: (event.explanation || '') + ` | ✅ Classificado manualmente como: ${opt.label}`,
                               confidence: 'alta'
                             });

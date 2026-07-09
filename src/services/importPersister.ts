@@ -158,7 +158,8 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
               'Ajuste Mercado Pago': { type: 'financeiro', dreClassification: 'outro' },
               'Retenção': { type: 'financeiro', dreClassification: 'outro' },
               'Pagamento de Fornecedor': { type: 'custo', dreClassification: 'custo_variavel' },
-              'Compra de mercadoria': { type: 'custo', dreClassification: 'custo_variavel' },
+              'Compra de Mercadorias': { type: 'custo', dreClassification: 'custo_variavel' },
+              'Despesa Operacional': { type: 'despesa', dreClassification: 'outro' },
               'Tarifa': { type: 'despesa', dreClassification: 'despesa_fixa' }
             };
 

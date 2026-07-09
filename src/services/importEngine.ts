@@ -839,7 +839,7 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
         const hasProductKeyword = /\b(mercadoria|estoque|produto|fornecedor|compra|pecas|peças|insumos|embalagem)\b/i.test(descLower);
         if (hasProductKeyword) {
           detectedTypeLabel = 'Pix enviado (Empresa)';
-          suggestedCategoryName = 'Compra de mercadoria';
+          suggestedCategoryName = 'Compra de Mercadorias';
           classificationReason = 'Pix enviado para empresa com termos de produto/estoque';
           classificationConfidence = 'alta';
           suggestedAction = 'Confirmar compra de mercadoria para estoque.';
@@ -860,6 +860,30 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
         suggestedAction = 'Revisar se é retirada, transferência pessoal ou outro tipo de saída.';
         initialClassificationStatus = 'pending_review';
       }
+    } else if (
+      // Compra de Mercadorias: apenas termos FORTES de estoque/revenda/matéria-prima.
+      // Termos fracos isolados (ex.: "atacado", "insumo") ficam de fora — sem contexto
+      // suficiente, a movimentação segue para revisão manual em vez de auto-classificar.
+      // Equipamentos/ativos duráveis são excluídos (não viram mercadoria automaticamente).
+      ['mercadoria', 'estoque', 'revenda', 'materia-prima', 'materia prima'].some(k => descLower.includes(k))
+      && !['notebook', 'computador', 'maquina', 'equipamento', 'movel', 'mobiliario', 'ativo imobilizado', 'impressora', 'celular', 'monitor'].some(k => descLower.includes(k))
+    ) {
+      detectedTypeLabel = 'Compra de Mercadorias';
+      suggestedCategoryName = 'Compra de Mercadorias';
+      classificationReason = 'Descrição indica compra de mercadoria/estoque para revenda';
+      classificationConfidence = 'alta';
+      suggestedAction = 'Registrar como custo variável (Compra de Mercadorias).';
+      initialClassificationStatus = 'classified';
+    } else if (
+      // Despesa Operacional: contas e serviços recorrentes para manter a operação.
+      ['internet', 'aluguel', 'energia', 'agua', 'luz', 'telefone', 'contabilidade', 'contador', 'hospedagem', 'dominio', 'assinatura'].some(k => descLower.includes(k))
+    ) {
+      detectedTypeLabel = 'Despesa Operacional';
+      suggestedCategoryName = 'Despesa Operacional';
+      classificationReason = 'Descrição indica despesa operacional (contas/serviços da empresa)';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como despesa operacional.';
+      initialClassificationStatus = 'pending_review';
     } else {
       detectedTypeLabel = 'Saída de Recursos';
       suggestedCategoryName = 'Movimentação Pendente de Classificação';
