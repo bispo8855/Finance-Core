@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BarChart3, ShieldCheck, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSemanticResult } from '@/hooks/finance/useSemanticResult';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { MonthYearPicker } from '@/components/shared/MonthYearPicker';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -30,6 +31,7 @@ export default function DREPage() {
 
   const monthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const { data: result, isLoading } = useSemanticResult(monthStr);
+  const { data: snapshot } = useFinanceSnapshot();
 
   if (isLoading || !result) {
     return <div className="p-8 text-center text-muted-foreground">Calculando resultado...</div>;
@@ -43,6 +45,9 @@ export default function DREPage() {
   // Estado vazio: nenhuma linha com valor e nada fora do resultado
   const allLinesZero = result.linhas.every(l => l.value === 0);
   const isEmpty = allLinesZero && result.foraDoResultado.length === 0;
+  // Diferencia "nada no mês" de "há lançamentos previstos, mas nada realizado ainda".
+  // Calculado na página (não no motor) para não alterar o contrato do SemanticResult.
+  const hasDocumentsInMonth = snapshot?.documents.some(d => d.competenceDate.startsWith(monthStr)) ?? false;
 
   // Agrupamento dos itens fora do resultado (só contagem e soma — drill-down é Etapa 3)
   const foraAgrupado = result.foraDoResultado.reduce<Record<string, { count: number; total: number }>>((acc, item) => {
@@ -107,7 +112,9 @@ export default function DREPage() {
 
       {isEmpty ? (
         <div className="bg-card rounded-xl border shadow-sm p-10 text-center text-muted-foreground">
-          Nenhum evento realizado neste período.
+          {hasDocumentsInMonth
+            ? 'Existem lançamentos neste período, mas nenhum valor foi realizado ainda. O Resultado Realizado considera apenas movimentações efetivamente pagas ou recebidas.'
+            : 'Nenhum evento realizado neste período.'}
         </div>
       ) : (
         <>
