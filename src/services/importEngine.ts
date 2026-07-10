@@ -642,7 +642,10 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
     } else if (line.detectedType === 'frete') {
       freightAmount += line.amount;
     } else {
-      if (line.amount > 0 && !isBankMode) grossAmount += line.amount;
+      // Linha positiva não classificada compõe o valor recebido do evento (bruto),
+      // NUNCA taxa — inclusive em modo bank. Uma liberação/payout não tem taxa própria;
+      // a taxa pertence ao registro da venda. (Só valores negativos vão para feeAmount.)
+      if (line.amount > 0) grossAmount += line.amount;
       else feeAmount += line.amount;
     }
   }

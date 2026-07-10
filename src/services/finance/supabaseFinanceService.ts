@@ -961,9 +961,9 @@ export class SupabaseFinanceService implements IFinanceService {
       condition: row.condition || 'avista',
       installments: row.installments || 1,
       createdAt: row.created_at,
-      grossAmount: row.gross_amount ? Number(row.gross_amount) : undefined,
-      marketplaceFee: row.marketplace_fee ? Number(row.marketplace_fee) : undefined,
-      shippingCost: row.shipping_cost ? Number(row.shipping_cost) : undefined,
+      grossAmount: row.gross_amount != null ? Number(row.gross_amount) : undefined,
+      marketplaceFee: row.marketplace_fee != null ? Number(row.marketplace_fee) : undefined,
+      shippingCost: row.shipping_cost != null ? Number(row.shipping_cost) : undefined,
       referenceId: row.reference_id || undefined,
       sourceType: row.source_type || undefined,
       importBatchId: row.import_batch_id || undefined

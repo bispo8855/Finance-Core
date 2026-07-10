@@ -205,9 +205,11 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
          firstDueDate: finalDueDate,
          paymentDate: payNow ? paymentDate : undefined,
          totalValue: Math.abs(event.netAmount),
-         // Garante que o valor bruto seja o próprio netAmount para entradas líquidas, anulando possíveis taxas mal interpretadas
-         grossAmount: event.primaryType === 'entrada_liquidada' ? Math.abs(event.netAmount) : Math.abs(event.grossAmount),
-         marketplaceFee: event.primaryType === 'entrada_liquidada' ? 0 : Math.abs(event.feeAmount),
+         // Liquidações positivas (liberacao/repasse/transferencia/deposito/antecipacao/
+         // entrada_liquidada) não têm taxa própria: o bruto é o próprio líquido e a taxa é 0.
+         // A taxa pertence ao registro da VENDA, não ao repasse — evita dupla dedução no extrato.
+         grossAmount: isLiquidation ? Math.abs(event.netAmount) : Math.abs(event.grossAmount),
+         marketplaceFee: isLiquidation ? 0 : Math.abs(event.feeAmount),
          shippingCost: Math.abs(event.freightAmount),
          description,
          condition: 'avista',
