@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import { BarChart3, ShieldCheck, AlertCircle } from 'lucide-react';
+import { BarChart3, ShieldCheck, AlertCircle, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSemanticResult } from '@/hooks/finance/useSemanticResult';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { MonthYearPicker } from '@/components/shared/MonthYearPicker';
+import { ResultAlerts } from '@/components/dre/ResultAlerts';
+import { ResultLineDetailSheet, DetailItem } from '@/components/dre/ResultLineDetailSheet';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pctOf = (part: number, total: number) => total === 0 ? '—' : (Math.abs(part) / Math.abs(total) * 100).toFixed(1) + '%';
@@ -28,6 +30,7 @@ const EXCLUSION_LABELS: Record<string, string> = {
 
 export default function DREPage() {
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [sheet, setSheet] = useState<{ title: string; total?: number; items: DetailItem[] } | null>(null);
 
   const monthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
   const { data: result, isLoading } = useSemanticResult(monthStr);
@@ -49,7 +52,7 @@ export default function DREPage() {
   // Calculado na página (não no motor) para não alterar o contrato do SemanticResult.
   const hasDocumentsInMonth = snapshot?.documents.some(d => d.competenceDate.startsWith(monthStr)) ?? false;
 
-  // Agrupamento dos itens fora do resultado (só contagem e soma — drill-down é Etapa 3)
+  // Agrupamento dos itens fora do resultado (contagem/soma; drill-down por reason abaixo)
   const foraAgrupado = result.foraDoResultado.reduce<Record<string, { count: number; total: number }>>((acc, item) => {
     const key = item.reason;
     if (!acc[key]) acc[key] = { count: 0, total: 0 };
@@ -58,23 +61,40 @@ export default function DREPage() {
     return acc;
   }, {});
 
-  const DRERow = ({ label, value, bold, result: isResult, indent }: {
+  // Itens por linha da cascata (para o drill-down)
+  const itemsByKey = new Map<string, DetailItem[]>(result.linhas.map((l) => [l.key, l.items as DetailItem[]]));
+  const itemsFor = (key: string): DetailItem[] => itemsByKey.get(key) ?? [];
+
+  const DRERow = ({ label, value, bold, result: isResult, indent, items, drillTitle }: {
     label: string; value: number; bold?: boolean; result?: boolean; indent?: boolean;
-  }) => (
-    <div className={cn(
-      'flex items-center justify-between py-2.5 px-4',
-      bold && 'font-bold',
-      isResult && 'bg-muted/50 rounded-lg',
-      indent && 'pl-8',
-    )}>
-      <span className={cn('text-sm', indent && 'text-muted-foreground')}>{label}</span>
-      <div className="flex items-center gap-4">
-        {/* Valor já vem assinado do motor — NÃO multiplicar por -1 */}
-        <span className={cn('text-sm font-medium tabular-nums', value < 0 ? 'text-negative' : value > 0 ? 'text-positive' : '')}>{fmt(value)}</span>
-        <span className="text-xs text-muted-foreground w-14 text-right tabular-nums">{pctOf(value, result.receitaBruta)}</span>
+    items?: DetailItem[]; drillTitle?: string;
+  }) => {
+    const clickable = !!items && items.length > 0;
+    return (
+      <div
+        className={cn(
+          'flex items-center justify-between py-2.5 px-4',
+          bold && 'font-bold',
+          isResult && 'bg-muted/50 rounded-lg',
+          indent && 'pl-8',
+          clickable && 'cursor-pointer hover:bg-muted/40 rounded-lg transition-colors',
+        )}
+        onClick={clickable ? () => setSheet({ title: drillTitle ?? label, total: value, items: items! }) : undefined}
+        role={clickable ? 'button' : undefined}
+        tabIndex={clickable ? 0 : undefined}
+      >
+        <span className={cn('text-sm flex items-center gap-1.5', indent && 'text-muted-foreground')}>
+          {label}
+          {clickable && <ChevronRight className="w-3.5 h-3.5 opacity-40" />}
+        </span>
+        <div className="flex items-center gap-4">
+          {/* Valor já vem assinado do motor — NÃO multiplicar por -1 */}
+          <span className={cn('text-sm font-medium tabular-nums', value < 0 ? 'text-negative' : value > 0 ? 'text-positive' : '')}>{fmt(value)}</span>
+          <span className="text-xs text-muted-foreground w-14 text-right tabular-nums">{pctOf(value, result.receitaBruta)}</span>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -110,6 +130,9 @@ export default function DREPage() {
         <MonthYearPicker date={currentDate} onChange={setCurrentDate} />
       </div>
 
+      {/* Alertas de qualidade (ancorados no motor novo) */}
+      <ResultAlerts result={result} />
+
       {isEmpty ? (
         <div className="bg-card rounded-xl border shadow-sm p-10 text-center text-muted-foreground">
           {hasDocumentsInMonth
@@ -141,21 +164,21 @@ export default function DREPage() {
               <h3 className="font-semibold">{months[currentDate.getMonth()]} {currentDate.getFullYear()}</h3>
             </div>
             <div className="p-2 space-y-0.5">
-              <DRERow label="Receita Bruta" value={result.receitaBruta} bold />
-              <DRERow label="(-) Estornos / Chargebacks" value={result.estornosChargebacks} indent />
-              <DRERow label="(-) Taxas e Deduções de Venda" value={result.taxasDeducoesVenda} indent />
+              <DRERow label="Receita Bruta" value={result.receitaBruta} bold items={itemsFor('receitaBruta')} drillTitle="Receita Bruta" />
+              <DRERow label="(-) Estornos / Chargebacks" value={result.estornosChargebacks} indent items={itemsFor('estornosChargebacks')} drillTitle="Estornos / Chargebacks" />
+              <DRERow label="(-) Taxas e Deduções de Venda" value={result.taxasDeducoesVenda} indent items={itemsFor('taxasDeducoesVenda')} drillTitle="Taxas e Deduções de Venda" />
               <DRERow label="(=) Receita Líquida" value={result.receitaLiquida} result />
-              <DRERow label="(-) Custos Variáveis" value={result.custosVariaveis} indent />
+              <DRERow label="(-) Custos Variáveis" value={result.custosVariaveis} indent items={itemsFor('custosVariaveis')} drillTitle="Custos Variáveis" />
               <DRERow label="(=) Margem de Contribuição" value={result.margemContribuicao} result />
-              <DRERow label="(-) Despesas Operacionais" value={result.despesasOperacionais} indent />
+              <DRERow label="(-) Despesas Operacionais" value={result.despesasOperacionais} indent items={itemsFor('despesasOperacionais')} drillTitle="Despesas Operacionais" />
               <DRERow label="(=) Resultado Operacional" value={result.resultadoOperacional} result bold />
-              <DRERow label="(+/-) Resultado Financeiro" value={result.resultadoFinanceiro} indent />
-              <DRERow label="(+/-) Outros" value={result.outros} indent />
+              <DRERow label="(+/-) Resultado Financeiro" value={result.resultadoFinanceiro} indent items={itemsFor('resultadoFinanceiro')} drillTitle="Resultado Financeiro" />
+              <DRERow label="(+/-) Outros" value={result.outros} indent items={itemsFor('outros')} drillTitle="Outros" />
               <DRERow label="(=) Resultado do Período" value={result.resultadoPeriodo} result bold />
             </div>
           </div>
 
-          {/* Transparência: itens que ficam fora do resultado (sem drill-down — Etapa 3) */}
+          {/* Transparência: itens que ficam fora do resultado (com drill-down por motivo) */}
           {result.foraDoResultado.length > 0 && (
             <div className="bg-card rounded-xl border shadow-sm">
               <div className="p-4 border-b">
@@ -167,20 +190,38 @@ export default function DREPage() {
                 </p>
               </div>
               <div className="p-3 space-y-1">
-                {Object.entries(foraAgrupado).map(([reason, agg]) => (
-                  <div key={reason} className="flex items-center justify-between px-2 py-1.5 text-sm">
-                    <span className="text-muted-foreground">
-                      {EXCLUSION_LABELS[reason] || reason}
-                      <span className="ml-2 text-xs text-muted-foreground/70">({agg.count})</span>
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">{fmt(agg.total)}</span>
-                  </div>
-                ))}
+                {Object.entries(foraAgrupado).map(([reason, agg]) => {
+                  const items = result.foraDoResultado.filter(f => f.reason === reason) as DetailItem[];
+                  const signedTotal = items.reduce((s, i) => s + i.amount, 0);
+                  return (
+                    <button
+                      key={reason}
+                      type="button"
+                      onClick={() => setSheet({ title: EXCLUSION_LABELS[reason] || reason, total: signedTotal, items })}
+                      className="w-full flex items-center justify-between px-2 py-1.5 text-sm rounded-md hover:bg-muted/40 transition-colors text-left"
+                    >
+                      <span className="text-muted-foreground flex items-center gap-1.5">
+                        {EXCLUSION_LABELS[reason] || reason}
+                        <span className="text-xs text-muted-foreground/70">({agg.count})</span>
+                        <ChevronRight className="w-3.5 h-3.5 opacity-40" />
+                      </span>
+                      <span className="tabular-nums text-muted-foreground">{fmt(agg.total)}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
         </>
       )}
+
+      <ResultLineDetailSheet
+        open={!!sheet}
+        onOpenChange={(o) => { if (!o) setSheet(null); }}
+        title={sheet?.title ?? ''}
+        total={sheet?.total}
+        items={sheet?.items ?? []}
+      />
     </div>
   );
 }
