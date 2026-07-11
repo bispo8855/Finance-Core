@@ -33,7 +33,8 @@ const REVIEW_REASONS = ['pending', 'unclassified', 'categoria_nao_resolvida', 'l
 
 export function buildMonthReading(
   current: SemanticResult,
-  previous: SemanticResult | null
+  previous: SemanticResult | null,
+  isCurrentMonth = false
 ): MonthReadingSentence[] {
   // Mês sem movimento → nenhuma frase (o card não é renderizado)
   const hasActivity = current.linhas.some((l) => l.value !== 0) || current.foraDoResultado.length > 0;
@@ -51,19 +52,22 @@ export function buildMonthReading(
     : null;
 
   // --- (a) VEREDITO — sempre a 1ª frase ---
+  // Mês em andamento não "fecha": está no azul/vermelho até agora.
+  const azul = isCurrentMonth ? 'está no azul até agora' : 'fechou no azul';
+  const vermelho = isCurrentMonth ? 'está no vermelho até agora' : 'fechou no vermelho';
   if (current.resultadoPeriodo > 0) {
     if (rb > 0) {
       const margem = pctInt(current.resultadoOperacional, rb);
       sentences.push({
         id: 'veredito',
         tone: 'positive',
-        text: `${mes} fechou no azul: sobrou ${brl(current.resultadoPeriodo)} de cada ${brl(rb)} vendidos — margem operacional de ${margem}%.`,
+        text: `${mes} ${azul}: sobrou ${brl(current.resultadoPeriodo)} de cada ${brl(rb)} vendidos — margem operacional de ${margem}%.`,
       });
     } else {
       sentences.push({
         id: 'veredito',
         tone: 'positive',
-        text: `${mes} fechou no azul, com sobra de ${brl(current.resultadoPeriodo)} no período.`,
+        text: `${mes} ${azul}, com sobra de ${brl(current.resultadoPeriodo)} no período.`,
       });
     }
   } else if (current.resultadoPeriodo < 0) {
@@ -71,7 +75,7 @@ export function buildMonthReading(
     sentences.push({
       id: 'veredito',
       tone: 'attention',
-      text: `${mes} fechou no vermelho em ${brl(Math.abs(current.resultadoPeriodo))}. O principal responsável foi ${culpado} — vale atenção antes que se repita.`,
+      text: `${mes} ${vermelho} em ${brl(Math.abs(current.resultadoPeriodo))}. O principal responsável foi ${culpado} — vale atenção antes que se repita.`,
     });
   } else {
     sentences.push({
@@ -114,17 +118,19 @@ export function buildMonthReading(
   }
 
   // --- (c) CAIXA ≠ RESULTADO ---
+  // Compara o caixa com o RESULTADO do período (não com totalAffectsResult): itens como
+  // cartão entram nos dois totais de "affectsResult" e mascarariam a divergência.
   let caixa: MonthReadingSentence | null = null;
   const cash = current.meta.totalAffectsCash;
-  const res = current.meta.totalAffectsResult;
-  const gap = Math.abs(cash - res);
+  const resultado = current.resultadoPeriodo;
+  const gap = Math.abs(cash - resultado);
   if (gap > 0.1 * Math.abs(rb) && gap > 1) {
     caixa = {
       id: 'caixa',
       tone: 'attention',
-      text: cash >= 0
-        ? `Cuidado com a sensação de caixa: entraram ${brl(cash)} na conta, mas só ${brl(res)} são resultado seu — o resto é reserva, transferência ou dinheiro já comprometido.`
-        : `Cuidado com a leitura do caixa: o mês movimentou ${brl(Math.abs(cash))} em saídas, mas o resultado real é ${brl(res)} — a diferença é reserva, transferência ou dinheiro já comprometido.`,
+      text: cash < resultado
+        ? `O resultado foi ${brl(resultado)}, mas o caixa do período ficou em ${brl(cash)} — parte do ganho já saiu como cartão, transferências ou reservas.`
+        : `Cuidado com a sensação de caixa: entraram ${brl(cash)} na conta, mas só ${brl(resultado)} são resultado seu — o resto é reserva, transferência ou dinheiro já comprometido.`,
     };
   }
 
@@ -132,6 +138,14 @@ export function buildMonthReading(
   let comparacao: MonthReadingSentence | null = null;
   if (previous && previous.receitaBruta > 0) {
     const prevName = monthName(previous.meta.periodo);
+    if (isCurrentMonth) {
+      // Mês em andamento: acompanhamento neutro, sem concluir tendência.
+      comparacao = {
+        id: 'comparacao',
+        tone: 'neutral',
+        text: `Com ${mes} ainda em andamento, a receita está em ${brl(current.receitaBruta)} — ${prevName} fechou em ${brl(previous.receitaBruta)}.`,
+      };
+    } else {
     const rPct = pctInt(current.receitaBruta - previous.receitaBruta, previous.receitaBruta);
     const resComputable = previous.resultadoPeriodo !== 0;
     const resPct = resComputable
@@ -155,6 +169,7 @@ export function buildMonthReading(
         text = `Receita ${Math.abs(rPct)}% abaixo de ${prevName} e resultado ${resStr ? `${resStr} menor` : 'menor'} — o mês perdeu força nas duas pontas.`;
       }
       comparacao = { id: 'comparacao', tone: resultadoUp ? 'positive' : 'attention', text };
+    }
     }
   }
 

@@ -152,6 +152,8 @@ describe('buildMonthReading', () => {
     const limpo = makeResult({
       receitaBruta: 1000, resultadoPeriodo: 300, resultadoOperacional: 300,
       linhas: [line('receitaBruta', 'Receita Bruta', 1000), line('custosVariaveis', 'Custos Variáveis', -50)],
+      // caixa alinhado ao resultado → sem gap
+      meta: { basis: 'realized', periodo: '2026-06', confidenceThreshold: 0.5, totalAffectsCash: 300, totalAffectsResult: 300, label: '', microcopy: '' },
     });
     const s = buildMonthReading(limpo, null);
     expect(s.some((x) => x.id === 'positivo')).toBe(true);
@@ -197,6 +199,50 @@ describe('buildMonthReading', () => {
     c = buildMonthReading(mk(500, 20), prev).find((x) => x.id === 'comparacao')!;
     expect(c.tone).toBe('attention');
     expect(c.text).toContain('perdeu força');
+  });
+
+  it('mês corrente: veredito usa "até agora" e comparação vira acompanhamento neutro', () => {
+    const prev = makeResult({
+      receitaBruta: 1000, resultadoPeriodo: 200, resultadoOperacional: 200,
+      linhas: [line('receitaBruta', 'Receita Bruta', 1000)],
+      meta: { basis: 'realized', periodo: '2026-06', confidenceThreshold: 0.5, totalAffectsCash: 200, totalAffectsResult: 200, label: '', microcopy: '' },
+    });
+    const cur = makeResult({
+      receitaBruta: 400, resultadoPeriodo: 80, resultadoOperacional: 80,
+      linhas: [line('receitaBruta', 'Receita Bruta', 400)],
+      meta: { basis: 'realized', periodo: '2026-07', confidenceThreshold: 0.5, totalAffectsCash: 80, totalAffectsResult: 80, label: '', microcopy: '' },
+    });
+    const s = buildMonthReading(cur, prev, true);
+    expect(s[0].id).toBe('veredito');
+    expect(s[0].text).toContain('até agora');
+    const comp = s.find((x) => x.id === 'comparacao')!;
+    expect(comp).toBeDefined();
+    expect(comp.tone).toBe('neutral');
+    expect(comp.text).toContain('ainda em andamento');
+    expect(comp.text).not.toMatch(/perdeu força|cresceu|enxuto/);
+  });
+
+  it('mês fechado (isCurrentMonth=false) mantém veredito com "fechou"', () => {
+    const r = makeResult({
+      receitaBruta: 1000, resultadoPeriodo: 200, resultadoOperacional: 200,
+      linhas: [line('receitaBruta', 'Receita Bruta', 1000)],
+      meta: { basis: 'realized', periodo: '2026-06', confidenceThreshold: 0.5, totalAffectsCash: 200, totalAffectsResult: 200, label: '', microcopy: '' },
+    });
+    expect(buildMonthReading(r, null).find((x) => x.id === 'veredito')!.text).toContain('fechou no azul');
+  });
+
+  it('gap via cartão (fora do resultado) dispara caixa e impede "mês limpo" — julho/2026', () => {
+    const r = makeResult({
+      receitaBruta: 791.53, resultadoOperacional: 791.53, resultadoPeriodo: 791.53,
+      linhas: [line('receitaBruta', 'Receita Bruta', 791.53, [{ label: 'Venda', amount: 791.53 }])],
+      foraDoResultado: [fora('financial_movement', -409.24)],
+      meta: { basis: 'realized', periodo: '2026-07', confidenceThreshold: 0.5, totalAffectsCash: 382.29, totalAffectsResult: 382.29, label: '', microcopy: '' },
+    });
+    const s = buildMonthReading(r, null);
+    const caixa = s.find((x) => x.id === 'caixa');
+    expect(caixa).toBeDefined();
+    expect(caixa!.text).toContain('parte do ganho já saiu como cartão');
+    expect(s.some((x) => x.id === 'positivo')).toBe(false);
   });
 
   it('limita a 4 frases e respeita a priorização (positivo é cortado)', () => {

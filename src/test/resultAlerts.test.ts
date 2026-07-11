@@ -102,6 +102,22 @@ describe('buildResultAlerts', () => {
     expect(buildResultAlerts(r).some((a) => a.id === 'cash_result_gap')).toBe(false);
   });
 
+  it('gap caixa×resultado dispara quando cartão está fora do resultado (blind spot) — julho/2026', () => {
+    // Cartão -409,24 roteado para fora do resultado: totalAffectsCash e totalAffectsResult
+    // são iguais (382,29), mas o resultadoPeriodo é 791,53 → o gap real só aparece contra ele.
+    const r = makeResult({
+      receitaBruta: 791.53,
+      resultadoPeriodo: 791.53,
+      foraDoResultado: [fora('financial_movement', -409.24)],
+      meta: {
+        basis: 'realized', periodo: '2026-07', confidenceThreshold: 0.5,
+        totalAffectsCash: 382.29, totalAffectsResult: 382.29, label: '', microcopy: '',
+      },
+    });
+    const alerts = buildResultAlerts(r);
+    expect(alerts.some((a) => a.id === 'cash_result_gap')).toBe(true);
+  });
+
   it('investimento fora do resultado gera alerta informativo', () => {
     const r = makeResult({ foraDoResultado: [fora('investimento', -1000)] });
     const alerts = buildResultAlerts(r);

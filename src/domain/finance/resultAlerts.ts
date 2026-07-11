@@ -45,7 +45,9 @@ export function buildResultAlerts(result: SemanticResult): ResultAlert[] {
   }
 
   // c. Divergência caixa × resultado (> 1% da receita bruta E > R$ 1)
-  const gap = Math.abs(result.meta.totalAffectsCash - result.meta.totalAffectsResult);
+  // Compara o caixa com o RESULTADO do período: itens como cartão entram nos dois totais
+  // de affectsResult e mascarariam o gap se comparássemos com totalAffectsResult.
+  const gap = Math.abs(result.meta.totalAffectsCash - result.resultadoPeriodo);
   const relThreshold = Math.abs(result.receitaBruta) * 0.01;
   if (gap > relThreshold && gap > 1) {
     alerts.push({

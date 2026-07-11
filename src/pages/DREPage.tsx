@@ -54,7 +54,9 @@ export default function DREPage() {
 
   // Leitura do Mês (usa o mês anterior só se tiver movimento; senão null)
   const prevHasActivity = !!prevResult && (prevResult.linhas.some(l => l.value !== 0) || prevResult.foraDoResultado.length > 0);
-  const monthReading = buildMonthReading(result, prevHasActivity ? prevResult! : null);
+  const now = new Date();
+  const isCurrentMonth = monthStr === `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthReading = buildMonthReading(result, prevHasActivity ? prevResult! : null, isCurrentMonth);
 
   // Estado vazio: nenhuma linha com valor e nada fora do resultado
   const allLinesZero = result.linhas.every(l => l.value === 0);
