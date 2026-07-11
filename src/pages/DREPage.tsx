@@ -6,6 +6,8 @@ import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
 import { MonthYearPicker } from '@/components/shared/MonthYearPicker';
 import { ResultAlerts } from '@/components/dre/ResultAlerts';
 import { ResultLineDetailSheet, DetailItem } from '@/components/dre/ResultLineDetailSheet';
+import { MonthReading } from '@/components/dre/MonthReading';
+import { buildMonthReading } from '@/domain/finance/monthReading';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pctOf = (part: number, total: number) => total === 0 ? '—' : (Math.abs(part) / Math.abs(total) * 100).toFixed(1) + '%';
@@ -33,7 +35,12 @@ export default function DREPage() {
   const [sheet, setSheet] = useState<{ title: string; total?: number; items: DetailItem[] } | null>(null);
 
   const monthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+  // Mês anterior (trata janeiro → dezembro do ano anterior). Snapshot é cacheado: sem request extra.
+  const prevDate = new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1);
+  const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
   const { data: result, isLoading } = useSemanticResult(monthStr);
+  const { data: prevResult } = useSemanticResult(prevMonthStr);
   const { data: snapshot } = useFinanceSnapshot();
 
   if (isLoading || !result) {
@@ -44,6 +51,10 @@ export default function DREPage() {
   const margemPct = result.receitaLiquida !== 0 ? result.margemContribuicao / result.receitaLiquida : null;
   const despesasPct = result.receitaLiquida > 0 ? Math.abs(result.despesasOperacionais) / result.receitaLiquida : null;
   const breakEven = margemPct !== null && margemPct > 0 ? Math.abs(result.despesasOperacionais) / margemPct : null;
+
+  // Leitura do Mês (usa o mês anterior só se tiver movimento; senão null)
+  const prevHasActivity = !!prevResult && (prevResult.linhas.some(l => l.value !== 0) || prevResult.foraDoResultado.length > 0);
+  const monthReading = buildMonthReading(result, prevHasActivity ? prevResult! : null);
 
   // Estado vazio: nenhuma linha com valor e nada fora do resultado
   const allLinesZero = result.linhas.every(l => l.value === 0);
@@ -141,6 +152,9 @@ export default function DREPage() {
         </div>
       ) : (
         <>
+          {/* Leitura do Mês — entre os alertas e os KPIs */}
+          <MonthReading sentences={monthReading} />
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-card rounded-xl border p-4 shadow-sm flex flex-col">
               <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wider mb-1">Margem de Contribuição</p>
