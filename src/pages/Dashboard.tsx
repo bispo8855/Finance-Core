@@ -1,128 +1,53 @@
-import { useState, useEffect, useDeferredValue } from 'react';
+import { useDeferredValue } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Plus, BarChart3, Calculator } from 'lucide-react';
-import { 
-  useDashboardSummary, 
-  useDashboardAlerts, 
-  useDashboardDrivers, 
-  useDashboardEvolution 
-} from '@/hooks/finance/useManagerialDashboard';
+import { Plus, BarChart3, Calculator, TrendingUp, TrendingDown, Percent, Wallet } from 'lucide-react';
 
-import { ExecutiveSummary } from '@/components/dashboard/ExecutiveSummary';
-import { ManagerialAlerts } from '@/components/dashboard/ManagerialAlerts';
-import { ExecutiveDrivers } from '@/components/dashboard/ExecutiveDrivers';
+import { useSemanticResult } from '@/hooks/finance/useSemanticResult';
+import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
+import { useDashboardEvolution } from '@/hooks/finance/useManagerialDashboard';
+import { buildMonthReading } from '@/domain/finance/monthReading';
+import { buildMonthProjection, lastDayOfMonthISO } from '@/domain/finance/monthProjection';
+import { formatDate } from '@/utils/formatters';
+
+import { KPICard } from '@/components/shared/KPICard';
+import { MonthReading } from '@/components/dre/MonthReading';
+import { ResultAlerts } from '@/components/dre/ResultAlerts';
+import { ProjectionCard } from '@/components/dashboard/ProjectionCard';
 import { EvolutionChart } from '@/components/dashboard/EvolutionChart';
-import { AurysRecommendationsPanel } from '@/components/dashboard/AurysRecommendationsPanel';
-import { useRecommendations } from '@/hooks/finance/useRecommendations';
-import { Lightbulb, Target, ShieldCheck } from 'lucide-react';
+import { FinanceSnapshot } from '@/services/finance/financeService';
 
-const SummarySkeleton = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-    {[1, 2, 3, 4].map(i => (
-      <div key={i} className="h-[128px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
-    ))}
-  </div>
-);
+const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const AlertsSkeleton = () => (
-  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <div className="lg:col-span-2 space-y-4">
-      <div className="h-[20px] w-[150px] bg-muted rounded animate-pulse" />
-      <div className="h-[80px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
-      <div className="h-[80px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
-    </div>
-    <div className="space-y-4">
-      <div className="h-[20px] w-[150px] bg-muted rounded animate-pulse" />
-      <div className="h-[176px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
-    </div>
-  </div>
-);
+const MESES = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+];
 
 const CardSkeleton = () => (
   <div className="h-[430px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
 );
 
-function DashboardHeader({ monthStr }: { monthStr: string }) {
-  const { data, isLoading } = useDashboardSummary(monthStr);
-  const { activeWorkspace } = useAuth();
-  const statusGeral = data?.statusGeral;
-  const mainInsight = data?.insights && data.insights.length > 0 ? data.insights[0] : null;
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-1">
-        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
-          <span>Aurys</span>
-          <span className="text-muted-foreground/30">|</span>
-          <span>{activeWorkspace?.name || 'Minha Empresa'}</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">Visão Geral</h1>
-          {!isLoading && statusGeral && (
-            <div className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1.5 border transition-all ${
-              statusGeral.status === 'saudavel' ? 'bg-positive/5 text-positive/70 border-positive/10' :
-              statusGeral.status === 'atencao' ? 'bg-warning/5 text-warning/70 border-warning/10' :
-              'bg-destructive/5 text-destructive/70 border-destructive/10'
-            }`}>
-              <div className={`w-1 h-1 rounded-full ${
-                statusGeral.status === 'saudavel' ? 'bg-positive/50' :
-                statusGeral.status === 'atencao' ? 'bg-warning/50' :
-                'bg-destructive/50'
-              }`} />
-              {statusGeral.status === 'saudavel' ? 'Saudável' :
-               statusGeral.status === 'atencao' ? 'Atenção' : 'Crítico'}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {!isLoading && statusGeral && (
-        <div className="flex items-center gap-4 p-4 rounded-xl bg-muted/20 border border-border/40 animate-in fade-in slide-in-from-top-2 duration-700">
-          <div className="bg-primary/10 p-1.5 rounded-lg shrink-0">
-            <Lightbulb className="w-4 h-4 text-primary" />
-          </div>
-          <div className="space-y-0.5">
-            <p className="text-sm font-semibold text-foreground">
-              {mainInsight ? 'Insight do Aurys' : (statusGeral.status === 'saudavel' ? 'Análise estratégica' : 'Observação importante')}
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed italic">
-              {mainInsight ? `"${mainInsight}"` : (statusGeral.message || 'O Aurys precisa de mais dados para gerar análises específicas.')}
-            </p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// Caixa Atual — puramente de contas/movimentos (mesma fonte de antes), sem managerialDashboard.
+function computeCaixaAtual(snapshot: FinanceSnapshot, todayISO: string): number {
+  let caixa = 0;
+  for (const a of snapshot.accounts) {
+    const openDate = a.openingBalanceDate || '1970-01-01';
+    if (openDate <= todayISO) {
+      let bal = a.openingBalance;
+      snapshot.movements
+        .filter(m => m.accountId === a.id && m.paymentDate >= openDate && m.paymentDate <= todayISO)
+        .forEach(m => { bal += m.type === 'entrada' ? m.valuePaid : -m.valuePaid; });
+      caixa += bal;
+    }
+  }
+  return caixa;
 }
 
-function SummarySection({ monthStr }: { monthStr: string }) {
-  const { data, isLoading } = useDashboardSummary(monthStr);
-  if (isLoading || !data) return <SummarySkeleton />;
-  return <div className="animate-fade-in"><ExecutiveSummary {...data} /></div>;
-}
-
-function AlertsSection({ monthStr }: { monthStr: string }) {
-  const { data, isLoading } = useDashboardAlerts(monthStr);
-  if (isLoading || !data) return <AlertsSkeleton />;
-  return <div className="animate-fade-in"><ManagerialAlerts alertas={data.alertas} insights={data.insights} /></div>;
-}
-
-function RecommendationsSection({ monthStr }: { monthStr: string }) {
-  const { recommendations, isLoading } = useRecommendations(monthStr);
-  return <div className="animate-fade-in"><AurysRecommendationsPanel recommendations={recommendations} isLoading={isLoading} /></div>;
-}
-
-function DriversSection({ monthStr }: { monthStr: string }) {
-  const { data, isLoading } = useDashboardDrivers(monthStr);
-  if (isLoading || !data) return <CardSkeleton />;
-  return <div className="animate-fade-in"><ExecutiveDrivers drivers={data.drivers} /></div>;
-}
-
+// Gráfico de evolução — mantido por ora (usa managerialDashboard/competência). Decisão futura.
 function EvolutionSection({ monthStr }: { monthStr: string }) {
   const { data, isLoading } = useDashboardEvolution(monthStr, true);
-  // Defer rendering of the heavy chart to low priority
   const deferredData = useDeferredValue(data);
   const deferredLoading = useDeferredValue(isLoading);
 
@@ -136,22 +61,74 @@ function EvolutionSection({ monthStr }: { monthStr: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const todayStr = new Date().toISOString().split('T')[0];
-  const monthStr = todayStr.substring(0, 7);
+  const { activeWorkspace } = useAuth();
+
+  const now = new Date();
+  const monthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const todayStr = `${monthStr}-${String(now.getDate()).padStart(2, '0')}`;
+  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  const prevMonthStr = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const { data: result, isLoading } = useSemanticResult(monthStr);
+  const { data: prevResult } = useSemanticResult(prevMonthStr);
+  const { data: snapshot } = useFinanceSnapshot();
+
+  const mesLabel = MESES[now.getMonth()];
+
+  if (isLoading || !result || !snapshot) {
+    return (
+      <div className="space-y-8 max-w-7xl">
+        <div className="h-10 w-64 bg-muted rounded animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-[128px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />)}
+        </div>
+      </div>
+    );
+  }
+
+  // KPIs (motor semântico)
+  const margemPct = result.receitaBruta !== 0 ? result.resultadoOperacional / result.receitaBruta : null;
+  const caixaAtual = computeCaixaAtual(snapshot, todayStr);
+
+  // Badge do cabeçalho — pelo sinal do resultado REALIZADO
+  const badgeNeg = result.resultadoPeriodo < 0;
+
+  // Leitura do Mês (mês corrente em andamento) + alertas
+  const prevHasActivity = !!prevResult && (prevResult.linhas.some(l => l.value !== 0) || prevResult.foraDoResultado.length > 0);
+  const monthReading = buildMonthReading(result, prevHasActivity ? prevResult! : null, true);
+
+  // Projeção do mês (aritmética dos previstos)
+  const projection = buildMonthProjection(result.resultadoPeriodo, snapshot.titles, monthStr, todayStr);
+  const lastDayLabel = formatDate(lastDayOfMonthISO(monthStr));
 
   return (
     <div className="space-y-8 max-w-7xl">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <DashboardHeader monthStr={monthStr} />
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground/60 uppercase tracking-[0.2em]">
+            <span>Aurys</span>
+            <span className="text-muted-foreground/30">|</span>
+            <span>{activeWorkspace?.name || 'Minha Empresa'}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">Visão Geral</h1>
+            <div className={`px-2 py-0.5 rounded-full text-[10px] font-semibold flex items-center gap-1.5 border ${
+              badgeNeg ? 'bg-destructive/5 text-destructive/70 border-destructive/10' : 'bg-positive/5 text-positive/70 border-positive/10'
+            }`}>
+              <div className={`w-1 h-1 rounded-full ${badgeNeg ? 'bg-destructive/50' : 'bg-positive/50'}`} />
+              {badgeNeg ? 'Atenção' : 'Saudável'}
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground">{mesLabel} até agora — valores realizados</p>
+        </div>
+
         <div className="flex items-center gap-3 mt-4 md:mt-0">
           <Button variant="outline" onClick={() => navigate('/dre')} className="gap-2">
-            <BarChart3 className="w-4 h-4 text-muted-foreground" />
-             Ver Análise de Resultado
+            <BarChart3 className="w-4 h-4 text-muted-foreground" /> Ver Análise de Resultado
           </Button>
           <Button variant="outline" onClick={() => navigate('/precificacao')} className="gap-2">
-            <Calculator className="w-4 h-4 text-muted-foreground" />
-             Precificação
+            <Calculator className="w-4 h-4 text-muted-foreground" /> Precificação
           </Button>
           <Button variant="secondary" onClick={() => navigate('/lancar')} className="gap-1.5 ml-2">
             <Plus className="w-4 h-4" /> Novo
@@ -159,21 +136,36 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* RESUMO EXECUTIVO */}
-      <SummarySection monthStr={monthStr} />
-
-      {/* RECOMENDAÇÕES DO AURYS (DECISION ENGINE) */}
-      <RecommendationsSection monthStr={monthStr} />
-
-      {/* ALERTS & INSIGHTS */}
-      <AlertsSection monthStr={monthStr} />
-
-      {/* DRIVERS & EVOLUCAO */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-stretch">
-        <EvolutionSection monthStr={monthStr} />
-        <DriversSection monthStr={monthStr} />
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Resultado (até agora)"
+          value={fmt(result.resultadoPeriodo)}
+          icon={result.resultadoPeriodo >= 0 ? TrendingUp : TrendingDown}
+          variant="featured"
+          onClick={() => navigate('/dre')}
+        />
+        <KPICard title="Receita Líquida" value={fmt(result.receitaLiquida)} icon={TrendingUp} variant="default" onClick={() => navigate('/dre')} />
+        <KPICard
+          title="Margem"
+          value={margemPct !== null ? (margemPct * 100).toFixed(1) + '%' : '—'}
+          subtitle={margemPct === null ? 'Sem receita no período' : undefined}
+          icon={Percent}
+          variant={margemPct === null ? 'default' : margemPct >= 0.2 ? 'positive' : margemPct > 0 ? 'warning' : 'negative'}
+          onClick={() => navigate('/dre')}
+        />
+        <KPICard title="Caixa Atual" value={fmt(caixaAtual)} icon={Wallet} variant={caixaAtual >= 0 ? 'default' : 'negative'} onClick={() => navigate('/fluxo')} />
       </div>
 
+      {/* PROJEÇÃO DO MÊS */}
+      <ProjectionCard projection={projection} lastDayLabel={lastDayLabel} />
+
+      {/* LEITURA DO MÊS + ALERTAS (reancorados no motor semântico) */}
+      <MonthReading sentences={monthReading} />
+      <ResultAlerts result={result} />
+
+      {/* EVOLUÇÃO */}
+      <EvolutionSection monthStr={monthStr} />
     </div>
   );
 }
