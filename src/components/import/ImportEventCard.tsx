@@ -432,6 +432,7 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                       { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado (volta depois)', categoryName: 'Retenção', primaryType: 'outros' as const },
                       { id: 'devolucao', label: '↩️ Devolução / Estorno', desc: 'Devolução de venda, estorno definitivo', categoryName: 'Devoluções e Estornos', primaryType: 'outros' as const },
                       { id: 'ajuste', label: '🔄 Ajuste / Compensação', desc: 'Correção, estorno parcial', categoryName: 'Ajuste Mercado Pago', primaryType: 'outros' as const },
+                      { id: 'encargo_financeiro', label: '💸 Encargo Financeiro', desc: 'Tarifa/juros de antecipação, débito por dívida', categoryName: 'Tarifas e Encargos Financeiros', primaryType: 'outros' as const },
                       { id: 'compra_mercadorias', label: '🛒 Compra de Mercadorias', desc: 'Estoque, produtos para revenda, matéria-prima', categoryName: 'Compra de Mercadorias', primaryType: 'outros' as const },
                       { id: 'despesa', label: '📉 Despesa Operacional', desc: 'Contas, serviços e gastos para manter a operação', categoryName: 'Despesa Operacional', primaryType: 'outros' as const },
                       { id: 'receita', label: '📈 Receita', desc: 'Entrada positiva', categoryName: 'Recebimentos via Pix', primaryType: 'venda' as const },

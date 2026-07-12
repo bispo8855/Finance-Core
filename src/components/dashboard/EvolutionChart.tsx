@@ -2,19 +2,20 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { Sparkles } from 'lucide-react';
 
 interface EvolucaoItem {
-  monthLabel: string;
-  receita: number;
-  resultado: number;
+  mesLabel: string;
+  receitaLiquida: number;
+  resultadoPeriodo: number;
 }
 
 interface EvolutionChartProps {
   evolucao: EvolucaoItem[];
   evolucaoInsight?: string;
+  footnote?: string;
 }
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-export function EvolutionChart({ evolucao, evolucaoInsight }: EvolutionChartProps) {
+export function EvolutionChart({ evolucao, evolucaoInsight, footnote }: EvolutionChartProps) {
   return (
     <div className="bg-white/50 rounded-2xl border border-border/40 shadow-sm p-6 w-full h-[380px]">
       <div className="mb-6 px-1">
@@ -28,15 +29,15 @@ export function EvolutionChart({ evolucao, evolucaoInsight }: EvolutionChartProp
           </div>
         )}
       </div>
-      <ResponsiveContainer width="100%" height="80%" className="-ml-4">
+      <ResponsiveContainer width="100%" height="72%" className="-ml-4">
         <ComposedChart data={evolucao} margin={{ top: 10, right: 10, left: 10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-          <XAxis 
-            dataKey="monthLabel" 
-            axisLine={false} 
-            tickLine={false} 
-            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} 
-            dy={10} 
+          <XAxis
+            dataKey="mesLabel"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }}
+            dy={10}
           />
           <YAxis 
             axisLine={false} 
@@ -45,31 +46,31 @@ export function EvolutionChart({ evolucao, evolucaoInsight }: EvolutionChartProp
             tickFormatter={(val) => `R$ ${val.toLocaleString('pt-BR', { notation: 'compact' })}`} 
             width={70} 
           />
-          <Tooltip 
-            formatter={(value: number, name: string) => [fmt(value), name === 'receita' ? 'Receita' : 'Resultado']}
+          <Tooltip
+            formatter={(value: number, name: string) => [fmt(value), name === 'receitaLiquida' ? 'Receita Líquida' : 'Resultado']}
             contentStyle={{ borderRadius: '8px', border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))', color: 'hsl(var(--foreground))' }}
           />
-          <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
-          
-          <Bar 
-            dataKey="receita" 
-            name="receita" 
-            fill="hsl(var(--primary))" 
-            radius={[4, 4, 0, 0]} 
-            barSize={30} 
+          <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} formatter={(name: string) => (name === 'receitaLiquida' ? 'Receita Líquida' : 'Resultado')} />
+
+          <Bar
+            dataKey="receitaLiquida"
+            name="receitaLiquida"
+            fill="hsl(var(--primary))"
+            radius={[4, 4, 0, 0]}
+            barSize={30}
           />
-          <Line 
-            type="monotone" 
-            dataKey="resultado" 
-            name="resultado" 
-            // Using a distinct color like green/gray or success token
-            stroke="#10b981" 
-            strokeWidth={3} 
+          <Line
+            type="monotone"
+            dataKey="resultadoPeriodo"
+            name="resultadoPeriodo"
+            stroke="#10b981"
+            strokeWidth={3}
             dot={{ r: 4, fill: '#10b981', stroke: 'hsl(var(--background))', strokeWidth: 2 }}
             activeDot={{ r: 6, strokeWidth: 0 }}
           />
         </ComposedChart>
       </ResponsiveContainer>
+      {footnote && <p className="text-[11px] text-muted-foreground/70 mt-1 px-1">{footnote}</p>}
     </div>
   );
 }

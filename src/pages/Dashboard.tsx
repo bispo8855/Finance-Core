@@ -1,4 +1,4 @@
-import { useDeferredValue } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -6,15 +6,18 @@ import { Plus, BarChart3, Calculator, TrendingUp, TrendingDown, Percent, Wallet 
 
 import { useSemanticResult } from '@/hooks/finance/useSemanticResult';
 import { useFinanceSnapshot } from '@/hooks/finance/useFinanceSnapshot';
-import { useDashboardEvolution } from '@/hooks/finance/useManagerialDashboard';
 import { buildMonthReading } from '@/domain/finance/monthReading';
 import { buildMonthProjection, lastDayOfMonthISO } from '@/domain/finance/monthProjection';
+import { buildResultSeries, buildResultTrendInsight } from '@/domain/finance/resultSeries';
+import { topNegativeImpacts } from '@/domain/finance/resultImpacts';
+import { buildFinancialComposition } from '@/domain/extract';
 import { formatDate } from '@/utils/formatters';
 
 import { KPICard } from '@/components/shared/KPICard';
 import { MonthReading } from '@/components/dre/MonthReading';
 import { ResultAlerts } from '@/components/dre/ResultAlerts';
 import { ProjectionCard } from '@/components/dashboard/ProjectionCard';
+import { TopImpactsCard } from '@/components/dashboard/TopImpactsCard';
 import { EvolutionChart } from '@/components/dashboard/EvolutionChart';
 import { FinanceSnapshot } from '@/services/finance/financeService';
 
@@ -25,9 +28,12 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const CardSkeleton = () => (
-  <div className="h-[430px] bg-card rounded-xl border border-border/50 shadow-sm animate-pulse" />
-);
+const MESES_ABBR = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+function chartMonthLabel(mesISO: string, isCurrent: boolean): string {
+  const [y, m] = mesISO.split('-');
+  return `${MESES_ABBR[Number(m) - 1]}/${y.slice(2)}${isCurrent ? '*' : ''}`;
+}
 
 // Caixa Atual — puramente de contas/movimentos (mesma fonte de antes), sem managerialDashboard.
 function computeCaixaAtual(snapshot: FinanceSnapshot, todayISO: string): number {
@@ -45,20 +51,6 @@ function computeCaixaAtual(snapshot: FinanceSnapshot, todayISO: string): number 
   return caixa;
 }
 
-// Gráfico de evolução — mantido por ora (usa managerialDashboard/competência). Decisão futura.
-function EvolutionSection({ monthStr }: { monthStr: string }) {
-  const { data, isLoading } = useDashboardEvolution(monthStr, true);
-  const deferredData = useDeferredValue(data);
-  const deferredLoading = useDeferredValue(isLoading);
-
-  if (!deferredData || deferredLoading) return <CardSkeleton />;
-  return (
-    <div className="animate-fade-in h-full">
-      <EvolutionChart evolucao={deferredData.evolucao} evolucaoInsight={deferredData.evolucaoInsight} />
-    </div>
-  );
-}
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const { activeWorkspace } = useAuth();
@@ -72,6 +64,14 @@ export default function Dashboard() {
   const { data: result, isLoading } = useSemanticResult(monthStr);
   const { data: prevResult } = useSemanticResult(prevMonthStr);
   const { data: snapshot } = useFinanceSnapshot();
+
+  // buildFinancialComposition roda UMA vez; a série chama calculateSemanticResult por mês.
+  const events = useMemo(
+    () => snapshot
+      ? buildFinancialComposition(snapshot.movements, snapshot.titles, snapshot.documents, snapshot.categories, snapshot.contacts, 'all')
+      : [],
+    [snapshot]
+  );
 
   const mesLabel = MESES[now.getMonth()];
 
@@ -100,6 +100,23 @@ export default function Dashboard() {
   // Projeção do mês (aritmética dos previstos)
   const projection = buildMonthProjection(result.resultadoPeriodo, snapshot.titles, monthStr, todayStr);
   const lastDayLabel = formatDate(lastDayOfMonthISO(monthStr));
+
+  // Tendência de Resultado — últimos 6 meses (incluindo o corrente), reancorada no motor
+  const months: string[] = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const series = buildResultSeries(events, snapshot, months);
+  const trendInsight = buildResultTrendInsight(series, monthStr);
+  const chartData = series.map(p => ({
+    mesLabel: chartMonthLabel(p.mes, p.mes === monthStr),
+    receitaLiquida: p.receitaLiquida,
+    resultadoPeriodo: p.resultadoPeriodo,
+  }));
+
+  // Maiores impactos do mês (itens negativos do resultado atual)
+  const impacts = topNegativeImpacts(result, 5);
 
   return (
     <div className="space-y-8 max-w-7xl">
@@ -164,8 +181,11 @@ export default function Dashboard() {
       <MonthReading sentences={monthReading} />
       <ResultAlerts result={result} />
 
-      {/* EVOLUÇÃO */}
-      <EvolutionSection monthStr={monthStr} />
+      {/* MAIORES IMPACTOS DO MÊS */}
+      <TopImpactsCard impacts={impacts} />
+
+      {/* TENDÊNCIA DE RESULTADO (motor semântico, últimos 6 meses) */}
+      <EvolutionChart evolucao={chartData} evolucaoInsight={trendInsight} footnote="* mês em andamento" />
     </div>
   );
 }
