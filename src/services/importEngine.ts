@@ -760,7 +760,18 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
 
   if (netAmount > 0) {
     // --- ENTRADAS ---
-    if (mode === 'sales' && finalPrimaryType === 'venda' && (source === 'Mercado Livre' || source === 'Mercado Pago')) {
+    if (descLower.includes('estorno') || descLower.includes('devolucao') || descLower.includes('reversao') || descLower.includes('reclamacao devolvida')) {
+      // Reversão de estorno (entrada): reclamação/disputa cancelada volta como ENTRADA.
+      // NÃO é receita nova → sugere Estornos (o positivo compensa o débito). Os textos reais
+      // de reversão do ML ainda não estão mapeados; sem sinal claro, "liberação de dinheiro"
+      // segue como venda (fica para revisão manual).
+      detectedTypeLabel = 'Devolução / Estorno (reversão)';
+      suggestedCategoryName = 'Devoluções e Estornos';
+      classificationReason = 'Reversão de estorno / reclamação devolvida (entrada). Confirme para não inflar a receita.';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como reversão de estorno (não é receita nova).';
+      initialClassificationStatus = 'pending_review';
+    } else if (mode === 'sales' && finalPrimaryType === 'venda' && (source === 'Mercado Livre' || source === 'Mercado Pago')) {
       detectedTypeLabel = 'Venda';
       suggestedCategoryName = 'Venda de Produtos';
       classificationReason = 'Venda importada do relatório de vendas do marketplace';
@@ -799,12 +810,21 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
       classificationConfidence = 'media';
       suggestedAction = 'Registrar como movimentação financeira (sem DRE).';
       initialClassificationStatus = 'pending_review';
-    } else if (descLower.includes('debito por divida') || descLower.includes('dinheiro retido') || descLower.includes('retido') || descLower.includes('retencao')) {
-      detectedTypeLabel = 'Retenção de Saldo';
-      suggestedCategoryName = 'Retenção';
-      classificationReason = 'Retenção ou débito automático judicial/dívida';
+    } else if (
+      descLower.includes('devolucao') || descLower.includes('estorno') || descLower.includes('reembolso ao comprador') ||
+      descLower.includes('debito por divida') || descLower.includes('dinheiro retido') || descLower.includes('retido') || descLower.includes('retencao')
+    ) {
+      // REGRA DE NEGÓCIO (confirmada): retenção ML = sempre DEVOLUÇÃO/estorno definitivo.
+      // Por isso a sugestão PADRÃO é "Devoluções e Estornos" (reduz o resultado), ainda em
+      // revisão. "Retenção Temporária" continua disponível como opção manual no Import Review
+      // para a exceção (disputa que ainda pode voltar).
+      // DECISÃO (Opção A2 descartada): NÃO implementar ledger de retenção temporária. O caso
+      // temporário é coberto por reclassificação manual + reversão positiva mapeada em Estornos.
+      detectedTypeLabel = 'Devolução / Estorno';
+      suggestedCategoryName = 'Devoluções e Estornos';
+      classificationReason = 'Retenção ML tratada como devolução/estorno (regra de negócio). Ajuste manual disponível.';
       classificationConfidence = 'media';
-      suggestedAction = 'Registrar como retenção temporária (sem DRE).';
+      suggestedAction = 'Registrar como estorno de venda (reduz o resultado). Se for retenção temporária, reclassifique manualmente.';
       initialClassificationStatus = 'pending_review';
     } else if (descLower.includes('ajuste') || descLower.includes('regularizacao')) {
       detectedTypeLabel = 'Ajuste de Saldo';

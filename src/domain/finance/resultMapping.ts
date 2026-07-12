@@ -183,6 +183,13 @@ export function routeItem(
     return { kind: 'excluded', reason: 'investimento', motivo: 'natureza de investimento (capital)' };
   }
 
+  // Devolução / estorno de venda → contra-receita (linha Estornos/Chargebacks).
+  // Checado ANTES do tipo (a categoria é 'despesa'): o valor assinado (saída negativa)
+  // reduz a Receita Líquida. Nunca vira Receita Bruta.
+  if (eff === 'estorno_devolucao') {
+    return { kind: 'line', line: 'estornosChargebacks', motivo: 'devolução/estorno de venda' };
+  }
+
   // Tributo sobre faturamento reduz a receita.
   if (eff === 'deducao_imposto') {
     return { kind: 'line', line: 'taxasDeducoesVenda', motivo: 'tributo sobre faturamento (dedução de venda)' };

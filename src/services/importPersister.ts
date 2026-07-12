@@ -160,6 +160,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
               'Pagamento de Fornecedor': { type: 'custo', dreClassification: 'custo_variavel' },
               'Compra de Mercadorias': { type: 'custo', dreClassification: 'custo_variavel' },
               'Despesa Operacional': { type: 'despesa', dreClassification: 'outro' },
+              'Devoluções e Estornos': { type: 'despesa', dreClassification: 'estorno_devolucao' },
               'Tarifa': { type: 'despesa', dreClassification: 'despesa_fixa' }
             };
 

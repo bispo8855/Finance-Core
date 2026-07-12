@@ -308,6 +308,24 @@ describe('calculateSemanticResult — regras de prioridade e exclusão', () => {
     expect(r.foraDoResultado.find((f) => f.eventId === 'alow')?.reason).toBe('low_confidence');
   });
 
+  it('categoria estorno_devolucao roteia para Estornos/Chargebacks e reduz a Receita Líquida', () => {
+    const categories = [
+      cat('crev', 'Venda', 'receita', 'receita_bruta'),
+      cat('cest', 'Devoluções e Estornos', 'despesa', 'estorno_devolucao'),
+    ];
+    const documents = [doc('dv', 'crev'), doc('de', 'cest')];
+    const events = [
+      makeEvent('v', 'dv', [makeItem('sale_gross', 100)]),
+      makeEvent('e', 'de', [makeItem('manual_expense', -30, { confidence: 0.8 })], { eventType: 'expense' }),
+    ];
+    const r = calculateSemanticResult(events, snapshot(categories, documents), MONTH);
+    expect(r.receitaBruta).toBe(100);
+    expect(r.estornosChargebacks).toBe(-30); // negativo reduz a receita líquida
+    expect(r.despesasOperacionais).toBe(0); // não cai em despesas
+    expect(r.custosVariaveis).toBe(0);
+    expect(r.receitaLiquida).toBe(70); // 100 - 30
+  });
+
   it('não conta em dobro: resultado = soma algébrica das linhas', () => {
     const categories = [
       cat('cv', 'Venda', 'receita', 'receita_bruta'),

@@ -213,8 +213,12 @@ function classifyEventType(doc: FinancialDocument, category?: Category): Financi
   // Pendente de classificação
   if (desc.includes('pendente de classificação') || desc.includes('⏳')) return 'pending';
 
-  // Chargeback / Estorno
-  if (desc.includes('chargeback') || desc.includes('estorno') || desc.includes('reembolso')) return 'chargeback';
+  // Chargeback / Estorno / Devolução (por descrição OU por categoria de estorno).
+  // A categoria garante que reversões POSITIVAS (doc.type 'venda') também caiam em estorno,
+  // e não em Receita Bruta.
+  if (category?.dreClassification === 'estorno_devolucao') return 'chargeback';
+  if (desc.includes('chargeback') || desc.includes('estorno') || desc.includes('reembolso') ||
+      desc.includes('devolução') || desc.includes('devolucao')) return 'chargeback';
 
   // Reserva
   if (desc.includes('reserva') || desc.includes('retenção') || desc.includes('retencao') ||
@@ -459,7 +463,9 @@ export function buildFinancialComposition(
     let resultImpactAmount = 0;
     const semanticBreakdown: FinancialCompositionItem[] = [];
 
-    if (eventType === 'sale' || (isEcom && doc.type === 'venda')) {
+    // eventType 'chargeback' (estorno/devolução) tem prioridade sobre o atalho de venda
+    // por doc.type — senão um estorno POSITIVO viraria sale_gross → Receita Bruta.
+    if (eventType !== 'chargeback' && (eventType === 'sale' || (isEcom && doc.type === 'venda'))) {
       eventKind = 'sale_settlement';
       
       if (!isEcom) {
@@ -574,13 +580,13 @@ export function buildFinancialComposition(
       });
     } else if (eventType === 'chargeback') {
       eventKind = 'chargeback';
-      resultImpactAmount = totalPaid; 
+      resultImpactAmount = totalPaid;
       semanticBreakdown.push({
         id: docId,
         semanticType: 'chargeback',
         label: 'Estorno / Chargeback',
         amount: totalPaid,
-        direction: 'outflow',
+        direction: totalPaid > 0 ? 'inflow' : 'outflow',
         affectsCash: true,
         affectsResult: true,
         isTemporary: false,

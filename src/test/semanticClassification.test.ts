@@ -359,9 +359,9 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(evCC.classificationConfidence).toBe('media');
     expect(evCC.classificationStatus).toBe('pending_review');
 
-    // Requisito 5 & 9: Débito por dinheiro retido → Retenção/Ajuste, sem DRE
+    // Requisito 5 & 9 (regra de negócio atualizada): "dinheiro retido" ML = devolução/estorno
     const evDebt = processedEvents.find(e => e.reference === 'REF_DEBT')!;
-    expect(evDebt.suggestedCategoryName).toBe('Retenção');
+    expect(evDebt.suggestedCategoryName).toBe('Devoluções e Estornos');
     expect(evDebt.classificationConfidence).toBe('media');
     expect(evDebt.classificationStatus).toBe('pending_review');
 
@@ -412,10 +412,10 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(catCard.type).toBe('financeiro');
     expect(catCard.dreClassification).toBe('outro');
 
-    const catRetention = categoriesDB.find(c => c.name === 'Retenção')!;
-    expect(catRetention).toBeDefined();
-    expect(catRetention.type).toBe('financeiro');
-    expect(catRetention.dreClassification).toBe('outro');
+    const catEstorno = categoriesDB.find(c => c.name === 'Devoluções e Estornos')!;
+    expect(catEstorno).toBeDefined();
+    expect(catEstorno.type).toBe('despesa');
+    expect(catEstorno.dreClassification).toBe('estorno_devolucao');
 
     const catSupplier = categoriesDB.find(c => c.name === 'Pagamento de Fornecedor')!;
     expect(catSupplier).toBeDefined();

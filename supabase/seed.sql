@@ -31,6 +31,10 @@ BEGIN
     -- Deduções (tipo despesa, mas vai pra dedução de imposto)
     (gen_random_uuid(), p_user_id, 'Impostos sobre Faturamento', 'despesa', 'deducao_imposto'),
 
+    -- Devoluções / Estornos (contra-receita: kind despesa evita a proteção de receita
+    -- em saídas; a natureza real fica em dre_classification = estorno_devolucao)
+    (gen_random_uuid(), p_user_id, 'Devoluções e Estornos', 'despesa', 'estorno_devolucao'),
+
     -- Custos (Diretos)
     (gen_random_uuid(), p_user_id, 'Compra de Mercadorias / Estoque', 'custo', 'custo_variavel'),
     (gen_random_uuid(), p_user_id, 'Matéria-Prima / Insumos', 'custo', 'custo_variavel'),

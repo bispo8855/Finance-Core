@@ -429,13 +429,19 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       { id: 'taxa_marketplace', label: '💳 Taxa Marketplace', desc: 'Comissão, tarifa de venda', categoryName: 'Tarifa', primaryType: 'outros' as const },
-                      { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado', categoryName: 'Retenção', primaryType: 'outros' as const },
+                      { id: 'retencao', label: '🔒 Retenção Temporária', desc: 'Reserva, saldo bloqueado (volta depois)', categoryName: 'Retenção', primaryType: 'outros' as const },
+                      { id: 'devolucao', label: '↩️ Devolução / Estorno', desc: 'Devolução de venda, estorno definitivo', categoryName: 'Devoluções e Estornos', primaryType: 'outros' as const },
                       { id: 'ajuste', label: '🔄 Ajuste / Compensação', desc: 'Correção, estorno parcial', categoryName: 'Ajuste Mercado Pago', primaryType: 'outros' as const },
                       { id: 'compra_mercadorias', label: '🛒 Compra de Mercadorias', desc: 'Estoque, produtos para revenda, matéria-prima', categoryName: 'Compra de Mercadorias', primaryType: 'outros' as const },
                       { id: 'despesa', label: '📉 Despesa Operacional', desc: 'Contas, serviços e gastos para manter a operação', categoryName: 'Despesa Operacional', primaryType: 'outros' as const },
                       { id: 'receita', label: '📈 Receita', desc: 'Entrada positiva', categoryName: 'Recebimentos via Pix', primaryType: 'venda' as const },
                       { id: 'outro', label: '📋 Outro', desc: 'Classificar depois', categoryName: undefined, primaryType: 'outros' as const },
-                    ].map(opt => (
+                    ].map(opt => {
+                      // Pré-destaque da opção sugerida pelo motor (ex.: "Devolução / Estorno"
+                      // para retenção ML). Visual apenas — a aprovação continua exigindo o clique,
+                      // para nunca aprovar um evento ainda não classificado (⏳ ficaria fora do resultado).
+                      const isSuggested = !selectedClassification && !!opt.categoryName && opt.categoryName === event.suggestedCategoryName;
+                      return (
                       <button
                         key={opt.id}
                         onClick={(e) => {
@@ -455,13 +461,19 @@ export default function ImportEventCard({ event, onStatusChange, onUpdateCategor
                           "flex flex-col items-start p-3 rounded-lg border-2 transition-all text-left",
                           selectedClassification === opt.id
                             ? "border-orange-500 bg-orange-100 shadow-sm"
-                            : "border-orange-100 bg-white hover:border-orange-300 hover:shadow-sm"
+                            : isSuggested
+                              ? "border-orange-300 bg-orange-50 shadow-sm"
+                              : "border-orange-100 bg-white hover:border-orange-300 hover:shadow-sm"
                         )}
                       >
-                        <span className="text-xs font-bold text-slate-800">{opt.label}</span>
+                        <span className="text-xs font-bold text-slate-800 flex items-center gap-1">
+                          {opt.label}
+                          {isSuggested && <span className="text-[8px] font-semibold text-orange-600 bg-orange-100 rounded px-1 py-0.5 uppercase">Sugerido</span>}
+                        </span>
                         <span className="text-[10px] text-slate-500 mt-0.5">{opt.desc}</span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                   
                   {selectedClassification && (
