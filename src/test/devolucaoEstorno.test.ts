@@ -17,13 +17,23 @@ function bankFile(desc: string, ref: string, net: string): ArrayBuffer {
 // ---------- importEngine: sugestão na importação ----------
 
 describe('Import: sugestão de Devolução/Estorno vs Retenção', () => {
-  it('"dinheiro retido" (retenção ML) é sugerido como Devolução/Estorno por padrão, em revisão', async () => {
+  it('"dinheiro retido reclamações e devoluções" é sugerido como Devolução/Estorno', async () => {
     const batch = await processImportFile(
-      bankFile('Débito por dívida/dinheiro retido', 'REF_RET1', '-330,07'),
+      bankFile('Dinheiro retido reclamações e devoluções', 'REF_RET1', '-330,07'),
       'x.xlsx', 'xlsx', 'Mercado Pago', 'bank'
     );
     const ev = batch.events.find(e => e.reference === 'REF_RET1')!;
     expect(ev.suggestedCategoryName).toBe('Devoluções e Estornos');
+    expect(ev.classificationStatus).toBe('pending_review');
+  });
+
+  it('"débito por dívida" (encargo de antecipação) sugere Tarifas e Encargos Financeiros', async () => {
+    const batch = await processImportFile(
+      bankFile('Débito por dívida', 'REF_DIV1', '-3,53'),
+      'x.xlsx', 'xlsx', 'Mercado Pago', 'bank'
+    );
+    const ev = batch.events.find(e => e.reference === 'REF_DIV1')!;
+    expect(ev.suggestedCategoryName).toBe('Tarifas e Encargos Financeiros');
     expect(ev.classificationStatus).toBe('pending_review');
   });
 
@@ -115,6 +125,19 @@ describe('Extract: devolução/estorno na descrição vira Estornos/Chargebacks'
     const r = calculateSemanticResult(events, snap(categories, documents, titles, movements), '2026-07');
     expect(r.receitaBruta).toBe(0);
     expect(r.estornosChargebacks).toBeCloseTo(0, 2); // -100 (débito) + 100 (reversão)
+  });
+
+  it('encargo financeiro (categoria financeiro/financeiro) roteia para Resultado Financeiro', () => {
+    const categories = [cat('cat_fin', 'Tarifas e Encargos Financeiros', 'financeiro', 'financeiro')];
+    const documents = [docFor('df', { type: 'despesa', categoryId: 'cat_fin', description: 'Débito por dívida', totalValue: 3.53, sourceType: 'Mercado Pago' })];
+    const titles = [titleFor('tf', 'df', { categoryId: 'cat_fin', side: 'pagar', status: 'pago', value: 3.53 })];
+    const movements = [movFor('mf', 'tf', 3.53, 'saida')];
+
+    const events = buildFinancialComposition(movements, titles, documents, categories, [], 'all');
+    const r = calculateSemanticResult(events, snap(categories, documents, titles, movements), '2026-07');
+    expect(r.resultadoFinanceiro).toBeCloseTo(-3.53, 2);
+    expect(r.estornosChargebacks).toBe(0);
+    expect(r.despesasOperacionais).toBe(0);
   });
 
   it('venda legítima permanece receita (não vira estorno)', () => {

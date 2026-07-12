@@ -62,6 +62,7 @@ BEGIN
     -- Financeiro (Movimentações Neutras / Juros)
     (gen_random_uuid(), p_user_id, 'Pagamento de Empréstimos', 'financeiro', 'financeiro'),
     (gen_random_uuid(), p_user_id, 'Tarifas Bancárias', 'financeiro', 'financeiro'),
+    (gen_random_uuid(), p_user_id, 'Tarifas e Encargos Financeiros', 'financeiro', 'financeiro'),
     (gen_random_uuid(), p_user_id, 'Saques e Transferências', 'financeiro', 'financeiro'),
     (gen_random_uuid(), p_user_id, 'Aportes de Capital', 'financeiro', 'financeiro'),
     (gen_random_uuid(), p_user_id, 'Juros / Multas Financeiras', 'financeiro', 'financeiro');

@@ -77,6 +77,19 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
   }
 
   // 5. Iterar sobre eventos e salvar sequencialmente
+  //
+  // DEDUP por (reference_id + source_type + natureza): evita documentos duplicados ao
+  // reimportar o mesmo arquivo. "Natureza" = categoria resolvida (effectiveCategoryId):
+  // um estorno carrega o reference_id da VENDA, mas com categoria diferente → NÃO é bloqueado
+  // (mesmo ref + naturezas diferentes = legítimo; mesmo ref + mesma natureza = duplicata).
+  const dedupKey = (ref: string, cat: string) => `${ref}::${source}::${cat}`;
+  const existingRefKeys = new Set<string>(
+    snapshot.documents
+      .filter(d => d.referenceId)
+      .map(d => dedupKey(d.referenceId!, d.categoryId))
+  );
+  const seenRefKeys = new Set<string>();
+
   let persistCount = 0;
   for (const event of events) {
     if (event.status !== 'aprovado') continue;
@@ -161,6 +174,7 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
               'Compra de Mercadorias': { type: 'custo', dreClassification: 'custo_variavel' },
               'Despesa Operacional': { type: 'despesa', dreClassification: 'outro' },
               'Devoluções e Estornos': { type: 'despesa', dreClassification: 'estorno_devolucao' },
+              'Tarifas e Encargos Financeiros': { type: 'financeiro', dreClassification: 'financeiro' },
               'Tarifa': { type: 'despesa', dreClassification: 'despesa_fixa' }
             };
 
@@ -192,6 +206,20 @@ export async function persistApprovedEvents(events: ImportEvent[], source: Impor
         }
 
         const effectiveCategoryId = finalCategoryId;
+
+        // DEDUP: documento com mesmo pedido (reference_id) + fonte + natureza (categoria) já existe?
+        if (event.reference) {
+          const key = dedupKey(event.reference, effectiveCategoryId);
+          if (existingRefKeys.has(key) || seenRefKeys.has(key)) {
+            if (!event.flags) event.flags = [];
+            if (!event.flags.includes('duplicate')) event.flags.push('duplicate');
+            event.reconciliationType = 'duplicate';
+            event.explanation = (event.explanation || '') + ' | Aviso: documento com mesmo pedido e natureza já existe (ignorado).';
+            persistCount++;
+            continue; // Não cria documento duplicado
+          }
+          seenRefKeys.add(key);
+        }
 
        // Evitar falsas vendas no modo bank, registrando apenas como receita para entradas líquidas
        const docType = isPendingClassification 

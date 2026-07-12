@@ -284,7 +284,7 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
       // 8. Pagamento de Cartão de Crédito (negative)
       ['2026-05-15', 'Pagamento Cartão de crédito', 'REF_CC', '-113,90', '659,56'],
       // 9. Débito por dinheiro retido / Retenção (negative)
-      ['2026-05-15', 'Débito por dívida/dinheiro retido', 'REF_DEBT', '-3,53', '656,03'],
+      ['2026-05-15', 'Débito por dívida', 'REF_DEBT', '-3,53', '656,03'],
       // 10. Tarifa operacional clara (negative)
       ['2026-05-15', 'Tarifa operacional Mercado Pago', 'REF_TARIFF', '-15,00', '641,03']
     ];
@@ -359,9 +359,9 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(evCC.classificationConfidence).toBe('media');
     expect(evCC.classificationStatus).toBe('pending_review');
 
-    // Requisito 5 & 9 (regra de negócio atualizada): "dinheiro retido" ML = devolução/estorno
+    // Requisito 5 & 9 (regra de negócio atualizada): "débito por dívida" = encargo financeiro
     const evDebt = processedEvents.find(e => e.reference === 'REF_DEBT')!;
-    expect(evDebt.suggestedCategoryName).toBe('Devoluções e Estornos');
+    expect(evDebt.suggestedCategoryName).toBe('Tarifas e Encargos Financeiros');
     expect(evDebt.classificationConfidence).toBe('media');
     expect(evDebt.classificationStatus).toBe('pending_review');
 
@@ -412,10 +412,10 @@ describe('Camada de Classificação Semântica de Saídas e Entradas', () => {
     expect(catCard.type).toBe('financeiro');
     expect(catCard.dreClassification).toBe('outro');
 
-    const catEstorno = categoriesDB.find(c => c.name === 'Devoluções e Estornos')!;
-    expect(catEstorno).toBeDefined();
-    expect(catEstorno.type).toBe('despesa');
-    expect(catEstorno.dreClassification).toBe('estorno_devolucao');
+    const catEncargo = categoriesDB.find(c => c.name === 'Tarifas e Encargos Financeiros')!;
+    expect(catEncargo).toBeDefined();
+    expect(catEncargo.type).toBe('financeiro');
+    expect(catEncargo.dreClassification).toBe('financeiro');
 
     const catSupplier = categoriesDB.find(c => c.name === 'Pagamento de Fornecedor')!;
     expect(catSupplier).toBeDefined();

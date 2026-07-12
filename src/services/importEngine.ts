@@ -810,9 +810,18 @@ function buildEventFromGroup(lines: ImportRawLine[], source: ImportSource, mode:
       classificationConfidence = 'media';
       suggestedAction = 'Registrar como movimentação financeira (sem DRE).';
       initialClassificationStatus = 'pending_review';
+    } else if (descLower.includes('debito por divida')) {
+      // REGRA DE NEGÓCIO (confirmada): "débito por dívida" = taxa de cobrança por antecipação
+      // de recebíveis = ENCARGO FINANCEIRO → Resultado Financeiro. Continua em revisão.
+      detectedTypeLabel = 'Encargo Financeiro';
+      suggestedCategoryName = 'Tarifas e Encargos Financeiros';
+      classificationReason = 'Débito por dívida — encargo/taxa de antecipação de recebíveis';
+      classificationConfidence = 'media';
+      suggestedAction = 'Registrar como encargo financeiro (Resultado Financeiro).';
+      initialClassificationStatus = 'pending_review';
     } else if (
       descLower.includes('devolucao') || descLower.includes('estorno') || descLower.includes('reembolso ao comprador') ||
-      descLower.includes('debito por divida') || descLower.includes('dinheiro retido') || descLower.includes('retido') || descLower.includes('retencao')
+      descLower.includes('dinheiro retido') || descLower.includes('retido') || descLower.includes('retencao')
     ) {
       // REGRA DE NEGÓCIO (confirmada): retenção ML = sempre DEVOLUÇÃO/estorno definitivo.
       // Por isso a sugestão PADRÃO é "Devoluções e Estornos" (reduz o resultado), ainda em
