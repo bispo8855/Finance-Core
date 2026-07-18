@@ -6,6 +6,7 @@ import {
   RESULT_LINE_LABELS,
   routeItem,
 } from './resultMapping';
+import { ResultBasis, RecognitionMeta } from './recognitionMeta';
 
 // ============================================================================
 // Resultado Gerencial REALIZADO (V1)
@@ -35,6 +36,7 @@ export interface ResultContributor {
   origin?: string;
   semanticType: string;
   motivo: string;
+  recognitionMeta?: RecognitionMeta; // só populado na base 'accrual' (Etapa C1)
 }
 
 export interface ResultLine {
@@ -54,6 +56,7 @@ export interface ExcludedItem {
   amount: number;
   semanticType: string;
   motivo: string;
+  recognitionMeta?: RecognitionMeta; // só populado na base 'accrual' (Etapa C1)
 }
 
 export interface SemanticResult {
@@ -74,14 +77,24 @@ export interface SemanticResult {
   // Itens que ficaram fora do resultado (para os alertas da Etapa 3)
   foraDoResultado: ExcludedItem[];
   meta: {
-    basis: 'realized';
+    basis: ResultBasis;
     periodo: string;
     confidenceThreshold: number;
     totalAffectsCash: number;
     totalAffectsResult: number;
     label: string;
     microcopy: string;
+    asOfDate?: string;                     // base 'accrual' (Rev.3 §2.5)
+    costMethod?: 'purchase_date_proxy';    // base 'accrual' (Rev.3 §2.1)
+    marginApproximated?: boolean;          // base 'accrual': margem aproximada (custo por proxy)
   };
+}
+
+export interface CalculateResultOptions {
+  confidenceThreshold?: number;
+  basis?: ResultBasis;                                 // default 'realized'
+  metaByDocumentId?: Record<string, RecognitionMeta>;
+  asOfDate?: string;                                   // 'YYYY-MM-DD'; só afeta accrual
 }
 
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.5;
@@ -89,6 +102,11 @@ const RESULT_LABEL = 'Resultado Gerencial Realizado';
 const RESULT_MICROCOPY =
   'Baseado nos eventos financeiros classificados e realizados pelo Aurys no período. ' +
   'Valores previstos ou ainda não liquidados não estão incluídos.';
+const RESULT_LABEL_ACCRUAL = 'Resultado Gerencial Econômico';
+const RESULT_MICROCOPY_ACCRUAL =
+  'Resultado por competência: reconhecido pela data econômica dos lançamentos, ' +
+  'independentemente de pagamento ou recebimento. Custos de mercadoria são reconhecidos ' +
+  'na compra (não é CMV contábil).';
 
 function emptyLine(key: ResultLineKey): ResultLine {
   return { key, label: RESULT_LINE_LABELS[key], value: 0, items: [] };
@@ -98,9 +116,12 @@ export function calculateSemanticResult(
   events: FinancialEvent[],
   snapshot: FinanceSnapshot,
   monthISO: string,
-  options?: { confidenceThreshold?: number }
+  options?: CalculateResultOptions
 ): SemanticResult {
   const confidenceThreshold = options?.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+  const basis: ResultBasis = options?.basis ?? 'realized';
+  const asOfDate = options?.asOfDate;
+  const metaByDocumentId = options?.metaByDocumentId;
 
   const buckets: Record<ResultLineKey, ResultLine> = {
     receitaBruta: emptyLine('receitaBruta'),
@@ -116,7 +137,13 @@ export function calculateSemanticResult(
   let totalAffectsCash = 0;
   let totalAffectsResult = 0;
 
-  const periodEvents = events.filter((e) => (e.date || '').startsWith(monthISO));
+  // Filtro de período. asOfDate (só no accrual) corta competência futura no mês corrente.
+  // Sem asOfDate (realizado) o filtro é IDÊNTICO ao anterior (startsWith puro).
+  const periodEvents = events.filter(
+    (e) =>
+      (e.date || '').startsWith(monthISO) &&
+      (!asOfDate || (e.date || '') <= asOfDate)
+  );
 
   for (const event of periodEvents) {
     const doc = event.documentId
@@ -127,17 +154,42 @@ export function calculateSemanticResult(
       : undefined;
     const isPending = event.eventType === 'pending';
 
+    // Base 'accrual': documento carimbado com motivo de exclusão pelo construtor
+    // (revisão/cancelado) vai INTEGRALMENTE para foraDoResultado, sem chamar routeItem.
+    const recMeta = metaByDocumentId?.[event.documentId];
+    const forceExclude = basis === 'accrual' && recMeta?.accrualExclusionReason;
+
     for (const item of event.semanticBreakdown) {
       // Métricas caixa × resultado (para o alerta de divergência da Etapa 3)
       if (item.affectsCash) totalAffectsCash += item.amount;
       if (item.affectsResult) totalAffectsResult += item.amount;
+
+      if (forceExclude) {
+        const excluded: ExcludedItem = {
+          reason: 'categoria_nao_resolvida',
+          eventId: event.id,
+          documentId: event.documentId,
+          date: event.date,
+          label: item.label,
+          categoryName: category?.name,
+          amount: item.amount,
+          semanticType: item.semanticType,
+          motivo:
+            recMeta!.accrualExclusionReason === 'cancelado'
+              ? 'documento cancelado/anulado'
+              : 'documento em revisão (competência ou títulos não confiáveis)',
+        };
+        if (recMeta) excluded.recognitionMeta = recMeta;
+        foraDoResultado.push(excluded);
+        continue;
+      }
 
       const decision = routeItem(item, category, { isPending, confidenceThreshold });
 
       if (decision.kind === 'line') {
         const line = buckets[decision.line];
         line.value += item.amount;
-        line.items.push({
+        const contributor: ResultContributor = {
           eventId: event.id,
           documentId: event.documentId,
           date: event.date,
@@ -147,9 +199,11 @@ export function calculateSemanticResult(
           origin: event.sourceType,
           semanticType: item.semanticType,
           motivo: decision.motivo,
-        });
+        };
+        if (recMeta) contributor.recognitionMeta = recMeta;
+        line.items.push(contributor);
       } else {
-        foraDoResultado.push({
+        const excluded: ExcludedItem = {
           reason: decision.reason,
           eventId: event.id,
           documentId: event.documentId,
@@ -159,7 +213,9 @@ export function calculateSemanticResult(
           amount: item.amount,
           semanticType: item.semanticType,
           motivo: decision.motivo,
-        });
+        };
+        if (recMeta) excluded.recognitionMeta = recMeta;
+        foraDoResultado.push(excluded);
       }
     }
   }
@@ -200,14 +256,24 @@ export function calculateSemanticResult(
       buckets.outros,
     ],
     foraDoResultado,
-    meta: {
-      basis: 'realized',
+    meta: buildMeta(),
+  };
+
+  function buildMeta(): SemanticResult['meta'] {
+    const m: SemanticResult['meta'] = {
+      basis,
       periodo: monthISO,
       confidenceThreshold,
       totalAffectsCash,
       totalAffectsResult,
-      label: RESULT_LABEL,
-      microcopy: RESULT_MICROCOPY,
-    },
-  };
+      label: basis === 'accrual' ? RESULT_LABEL_ACCRUAL : RESULT_LABEL,
+      microcopy: basis === 'accrual' ? RESULT_MICROCOPY_ACCRUAL : RESULT_MICROCOPY,
+    };
+    if (basis === 'accrual') {
+      if (asOfDate) m.asOfDate = asOfDate;
+      m.costMethod = 'purchase_date_proxy';
+      m.marginApproximated = buckets.custosVariaveis.items.length > 0;
+    }
+    return m;
+  }
 }
