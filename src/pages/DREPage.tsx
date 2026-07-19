@@ -10,6 +10,7 @@ import { ResultAlerts } from '@/components/dre/ResultAlerts';
 import { ResultLineDetailSheet, DetailItem } from '@/components/dre/ResultLineDetailSheet';
 import { MonthReading } from '@/components/dre/MonthReading';
 import { buildMonthReading } from '@/domain/finance/monthReading';
+import { contributionMarginPct, resultBannerText } from '@/domain/finance/resultKpi';
 
 const fmt = (v: number) => 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const pctOf = (part: number, total: number) => total === 0 ? '—' : (Math.abs(part) / Math.abs(total) * 100).toFixed(1) + '%';
@@ -82,8 +83,10 @@ export default function DREPage() {
     );
   }
 
-  // KPIs recalculados a partir do motor novo (com proteção contra divisão por zero)
-  const margemPct = result.receitaLiquida !== 0 ? result.margemContribuicao / result.receitaLiquida : null;
+  // KPIs recalculados a partir do motor novo (com proteção contra divisão por zero).
+  // margemPct é null quando a receita líquida não é positiva → card mostra "—"
+  // (e o ponto de equilíbrio, que depende dela, também).
+  const margemPct = contributionMarginPct(result.receitaLiquida, result.margemContribuicao);
   const despesasPct = result.receitaLiquida > 0 ? Math.abs(result.despesasOperacionais) / result.receitaLiquida : null;
   const breakEven = margemPct !== null && margemPct > 0 ? Math.abs(result.despesasOperacionais) / margemPct : null;
 
@@ -95,6 +98,9 @@ export default function DREPage() {
   const monthReading = realized.data
     ? buildMonthReading(realized.data, prevHasActivity ? prevResult! : null, isCurrentMonth)
     : [];
+
+  // Banner de resultado — texto ciente de mês corrente × fechado (helper puro).
+  const banner = resultBannerText(result.resultadoPeriodo, isCurrentMonth);
 
   // Estado vazio: nenhuma linha com valor e nada fora do resultado
   const allLinesZero = result.linhas.every(l => l.value === 0);
@@ -162,20 +168,25 @@ export default function DREPage() {
       {/* Toggle de base — ABAIXO do cabeçalho (C2 §10.2). Realizado é o padrão. */}
       <BasisToggle />
 
-      {/* Banner simples de resultado (riskState/Plano/Diagnóstico voltam na Etapa 3) */}
-      {result.resultadoPeriodo > 0 && (
+      {/* Banner de resultado — texto do helper puro; moeda e cores ficam aqui.
+          Resultado zero → banner ausente. */}
+      {banner?.tone === 'positive' && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
           <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-500 flex-shrink-0" />
           <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400">
-            Resultado do período positivo de <strong>{fmt(result.resultadoPeriodo)}</strong>.
+            {banner.template.split('{X}')[0]}
+            <strong>{fmt(banner.amount)}</strong>
+            {banner.template.split('{X}')[1]}
           </p>
         </div>
       )}
-      {result.resultadoPeriodo < 0 && (
+      {banner?.tone === 'negative' && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 shadow-sm">
           <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-500 flex-shrink-0" />
           <p className="text-sm font-medium text-red-800 dark:text-red-400">
-            O período fechou com prejuízo de <strong>{fmt(Math.abs(result.resultadoPeriodo))}</strong>.
+            {banner.template.split('{X}')[0]}
+            <strong>{fmt(banner.amount)}</strong>
+            {banner.template.split('{X}')[1]}
           </p>
         </div>
       )}
