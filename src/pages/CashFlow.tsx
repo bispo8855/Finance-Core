@@ -91,21 +91,22 @@ export default function CashFlow() {
     return <div className="p-8 text-center text-muted-foreground">Projetando fluxo de caixa...</div>;
   }
 
-  const { totalEntradas, totalSaidas, saldoFinal: finalBalance, initialBalance } = cashflow;
+  const {
+    totalEntradas, totalSaidas, saldoFinal: finalBalance, initialBalance,
+    overdueReceber, overduePagar, caixaAposPendencias, hasOverdue,
+  } = cashflow;
+
+  // FC1 — nota anexada ao banner quando existem pendências vencidas.
+  const notaPendencias = hasOverdue
+    ? `há pendências vencidas: ${fmt(overduePagar)} a pagar e ${fmt(overdueReceber)} a receber.`
+    : null;
   
   // Extract pending titles within range from snapshot directly
   const endDate = new Date(todayStr);
   endDate.setDate(endDate.getDate() + rangeDays);
 
   // Reconciliation Block Calculations (visao do dia, independente do filtro de range)
-  const pendenciasReceber = snapshot.titles
-    .filter(t => t.side === 'receber' && ['previsto', 'atrasado'].includes(t.status) && t.dueDate < todayStr)
-    .reduce((acc, t) => acc + t.value, 0);
-
-  const pendenciasPagar = snapshot.titles
-    .filter(t => t.side === 'pagar' && ['previsto', 'atrasado'].includes(t.status) && t.dueDate < todayStr)
-    .reduce((acc, t) => acc + t.value, 0);
-
+  // Os vencidos vêm do domínio (FC1, fonte única): overdueReceber / overduePagar.
   const proximosReceber = snapshot.titles
     .filter(t => t.side === 'receber' && ['previsto', 'atrasado'].includes(t.status) && t.dueDate >= todayStr)
     .reduce((acc, t) => acc + t.value, 0);
@@ -144,7 +145,11 @@ export default function CashFlow() {
       {cashflow.riskState === 'saudavel' && (
         <div className="flex items-center gap-3 p-4 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
           <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-500 flex-shrink-0" />
-          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400">Caixa projetado permanece positivo em todo o período.</p>
+          <p className="text-sm font-medium text-emerald-800 dark:text-emerald-400">
+            {notaPendencias
+              ? `Caixa permanece positivo, mas ${notaPendencias}`
+              : 'Caixa projetado permanece positivo em todo o período.'}
+          </p>
         </div>
       )}
       {cashflow.riskState === 'atencao' && (
@@ -152,6 +157,7 @@ export default function CashFlow() {
           <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-500 flex-shrink-0" />
           <div className="text-sm font-medium text-amber-800 dark:text-amber-400">
             Atenção: A projeção indica forte consumo de caixa. Menor saldo: <strong>{fmt(cashflow.minBalance)}</strong> em {cashflow.minBalanceDate ? new Date(cashflow.minBalanceDate + 'T12:00:00').toLocaleDateString('pt-BR') : ''}.
+            {notaPendencias && <> Além disso, {notaPendencias}</>}
           </div>
         </div>
       )}
@@ -160,6 +166,7 @@ export default function CashFlow() {
           <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-500 flex-shrink-0" />
           <div className="text-sm font-medium text-red-800 dark:text-red-400">
             Atenção: Saldo projetado fica <strong>negativo ({fmt(cashflow.minBalance)})</strong> em {cashflow.minBalanceDate ? new Date(cashflow.minBalanceDate + 'T12:00:00').toLocaleDateString('pt-BR') : ''}. Ação necessária.
+            {notaPendencias && <> Além disso, {notaPendencias}</>}
           </div>
         </div>
       )}
@@ -197,6 +204,25 @@ export default function CashFlow() {
           <p className={cn('text-xl font-bold mt-1', finalBalance < 0 ? 'text-negative' : 'text-foreground')}>{fmt(finalBalance)}</p>
         </div>
       </div>
+
+      {/* FC1 — LENTE DE RISCO IMEDIATO (não é projeção; fora da grade de cards) */}
+      {hasOverdue && (
+        <div className="rounded-xl border-l-4 border-l-amber-500 border border-border bg-amber-50/40 dark:bg-amber-950/10 p-5">
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-500">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <h3 className="text-xs font-bold uppercase tracking-wider">Caixa após pendências vencidas</h3>
+          </div>
+          <p className={cn('text-2xl font-bold mt-2', caixaAposPendencias < 0 ? 'text-negative' : 'text-foreground')}>
+            {fmt(caixaAposPendencias)}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1.5">
+            Caixa atual {fmt(initialBalance)} + a receber vencido {fmt(overdueReceber)} − a pagar vencido {fmt(overduePagar)}
+          </p>
+          <p className="text-xs text-muted-foreground/80 italic mt-1">
+            Valores a receber vencidos podem não se concretizar.
+          </p>
+        </div>
+      )}
 
       {/* CHART DE TRAJETÓRIA DIÁRIA */}
       <Card className="bg-card border shadow-sm">
@@ -281,13 +307,13 @@ export default function CashFlow() {
               
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-muted-foreground">A Receber em atraso</span>
-                <span className="font-semibold text-foreground">{fmt(pendenciasReceber)}</span>
+                <span className="font-semibold text-foreground">{fmt(overdueReceber)}</span>
               </div>
               <Separator className="bg-red-100 dark:bg-red-900/30" />
               <div className="flex justify-between items-center">
                 <span className="text-sm font-medium text-muted-foreground">A Pagar em atraso</span>
-                <span className={cn("font-bold text-lg", pendenciasPagar > 0 ? "text-negative" : "text-foreground")}>
-                  {pendenciasPagar > 0 ? `-${fmt(pendenciasPagar)}` : fmt(0)}
+                <span className={cn("font-bold text-lg", overduePagar > 0 ? "text-negative" : "text-foreground")}>
+                  {overduePagar > 0 ? `-${fmt(overduePagar)}` : fmt(0)}
                 </span>
               </div>
             </div>

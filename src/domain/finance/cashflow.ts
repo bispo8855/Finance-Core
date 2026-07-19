@@ -29,6 +29,16 @@ export interface CashflowResult {
   minBalanceDate: string | null;
   riskState: RiskState;
   initialBalance: number;
+  // FC1 — Pendências vencidas (dueDate < startDateISO, status aberto).
+  // NÃO entram na projeção (lines/totalEntradas/totalSaidas/saldoFinal/minBalance):
+  // vencido é sinal de risco imediato, não previsão de futuro.
+  overdueReceber: number;
+  overduePagar: number;
+  /** initialBalance + overdueReceber − overduePagar (leitura líquida). */
+  caixaAposPendencias: number;
+  /** initialBalance − overduePagar. Só obrigação certa; o risco usa este piso. */
+  pisoConservador: number;
+  hasOverdue: boolean;
 }
 
 export function calculateCashflow({
@@ -130,6 +140,21 @@ export function calculateCashflow({
     }
   }
 
+  // FC1 — passada extra sobre os títulos: pendências VENCIDAS.
+  // Disjunto da projeção pela fronteira de hoje (projeção usa dueDate >= startDateISO),
+  // portanto não há dupla contagem. Ao liquidar, o título vira movimento e sai daqui.
+  let overdueReceber = 0;
+  let overduePagar = 0;
+  for (const t of titles) {
+    if (t.status !== 'previsto' && t.status !== 'atrasado') continue;
+    if (t.dueDate >= startDateISO) continue;
+    if (t.side === 'receber') overdueReceber += t.value;
+    else overduePagar += t.value;
+  }
+  const caixaAposPendencias = initialBalance + overdueReceber - overduePagar;
+  const pisoConservador = initialBalance - overduePagar;
+  const hasOverdue = overdueReceber > 0 || overduePagar > 0;
+
   const alertas: string[] = [];
   let minBalance = Infinity;
   let minBalanceDate: string | null = null;
@@ -178,10 +203,17 @@ export function calculateCashflow({
 
   if (minBalance === Infinity) minBalance = currentBalance;
 
+  // FC1 — risco pelo PIOR caso entre projeção e piso conservador.
+  // O a receber vencido nunca melhora o risco (é incerto): só o pisoConservador entra.
+  // A regra dos 50% só tem leitura com initialBalance > 0.
   let riskState: RiskState = 'saudavel';
-  if (minBalance < 0) {
+  if (minBalance < 0 || pisoConservador < 0) {
     riskState = 'critico';
-  } else if (minBalance < initialBalance * 0.5) {
+  } else if (
+    initialBalance > 0 &&
+    (minBalance < initialBalance * 0.5 ||
+      (hasOverdue && pisoConservador < initialBalance * 0.5))
+  ) {
     riskState = 'atencao';
   }
 
@@ -189,5 +221,9 @@ export function calculateCashflow({
   const totalSaidas = lines.reduce((acc, l) => acc + l.saidas, 0);
   const saldoFinal = currentBalance;
 
-  return { lines, alertas, totalEntradas, totalSaidas, saldoFinal, hasMissingOpeningDates, minBalance, minBalanceDate, riskState, initialBalance };
+  return {
+    lines, alertas, totalEntradas, totalSaidas, saldoFinal, hasMissingOpeningDates,
+    minBalance, minBalanceDate, riskState, initialBalance,
+    overdueReceber, overduePagar, caixaAposPendencias, pisoConservador, hasOverdue,
+  };
 }
