@@ -228,9 +228,17 @@ function classifyEventType(doc: FinancialDocument, category?: Category): Financi
   if (desc.includes('repasse') || desc.includes('liberação') || desc.includes('liberacao') ||
       desc.includes('payout') || desc.includes('liquidação') || desc.includes('liquidacao')) return 'repasse';
 
-  // Transferência bancária
-  if (desc.includes('transferência') || desc.includes('transferencia') ||
-      desc.includes('ted') || desc.includes('pix') || desc.includes('depósito') || desc.includes('deposito')) return 'transfer';
+  // Palavra semântica de transferência — precedência mantida (transfers reais + T-TR)
+  if (desc.includes('transferência') || desc.includes('transferencia')) return 'transfer';
+
+  // Trilhos de pagamento (pix/ted/depósito) são NEUTROS: só indicam transferência quando
+  // NÃO há classificação operacional explícita. "Pix enviado Fornecedor" categorizado como
+  // Compra de Mercadorias é DESPESA/CUSTO, não transferência.
+  const isOperationalCategory =
+    category?.type === 'custo' || category?.type === 'despesa' || category?.type === 'receita';
+  if (!isOperationalCategory &&
+      (desc.includes('ted') || desc.includes('pix') || desc.includes('depósito') || desc.includes('deposito')))
+    return 'transfer';
 
   // Ajuste
   if (desc.includes('ajuste') || desc.includes('compensação') || desc.includes('compensacao')) return 'adjustment';
