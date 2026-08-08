@@ -18,7 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { buildPersonalMonth } from '@/domain/personal/personalMonth';
 import { buildPersonalReading } from '@/domain/personal/personalReading';
 import { buildPersonalAlerts } from '@/domain/personal/personalAlerts';
-import { addMonthsISO } from '@/domain/personal/cardCycles';
+import { addMonthsISO, monthOf } from '@/domain/personal/cardCycles';
 import { Confidence, PersonalMonthResult, ScenarioTriple } from '@/domain/personal/types';
 import { PersonalHeroes, ConfidenceDot } from '@/components/personal/PersonalHeroes';
 import { PersonalTimeline } from '@/components/personal/PersonalTimeline';
@@ -68,10 +68,17 @@ export default function PersonalOverview() {
       addMonthsISO(PERSONAL_DEMO_MONTH, 1),
       addMonthsISO(PERSONAL_DEMO_MONTH, 2),
     ];
-    return meses.map((m) => ({
-      monthISO: m,
-      r: buildPersonalMonth(PERSONAL_DEMO_INPUTS, m, PERSONAL_DEMO_TODAY),
-    }));
+    return meses.map((m) => {
+      // Nota do mês: filtra os eventos de entrada pela DATA (exibir/ocultar, não é cálculo).
+      // Patrimonial no mês tem precedência (valores grandes que explicam o salto do saldo).
+      const eventosNoMes = PERSONAL_DEMO_INPUTS.extraordinaryEvents.filter((e) => monthOf(e.date) === m);
+      const nota = eventosNoMes.some((e) => e.klass === 'patrimonial')
+        ? 'inclui evento patrimonial'
+        : eventosNoMes.length > 0
+          ? 'inclui eventos fora da rotina'
+          : null;
+      return { monthISO: m, r: buildPersonalMonth(PERSONAL_DEMO_INPUTS, m, PERSONAL_DEMO_TODAY), nota };
+    });
   }, []);
 
   const { foraDaRotina, jaOcorreuNoMes } = result;
@@ -175,9 +182,16 @@ export default function PersonalOverview() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {proximosMeses.map(({ monthISO, r }) => (
+                  {proximosMeses.map(({ monthISO, r, nota }) => (
                     <tr key={monthISO}>
-                      <td className="px-4 py-2.5 font-medium capitalize">{rotuloMes(monthISO)}</td>
+                      <td className="px-4 py-2.5 font-medium capitalize">
+                        {rotuloMes(monthISO)}
+                        {nota && (
+                          <span className="ml-2 text-[10px] font-normal normal-case text-muted-foreground">
+                            ({nota})
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-right tabular-nums text-xs">
                         <span className={cn(r.saldoProjetado.range[0] < 0 && 'text-negative')}>
                           {formatCurrency(r.saldoProjetado.range[0])}

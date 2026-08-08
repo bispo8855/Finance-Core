@@ -33,6 +33,18 @@ export function PersonalHeroes({ result }: { result: PersonalMonthResult }) {
   const temVale = menorSaldo.value < 0;
   const semFolga = disponivelPrudente.value <= 0;
 
+  // AP3.1 — quando o disponível já é zero PORQUE o saldo projetado fecha negativo, listar as
+  // deduções integrais (incl. patrimoniais futuros travados) confunde: parece que havia folga
+  // sendo consumida. Neste caso, trocamos por uma leitura EM CAMADAS. Não é número novo — são
+  // explicações exibidas/ocultadas com base em campos que já vêm do motor.
+  const zeradoPorSaldoNegativo = disponivelPrudente.value === 0 && saldoProjetado.range[0] < 0;
+  const temReembolsoPendente = result.foraDaRotina.reembolsaveis.some((r) => r.status !== 'recebido');
+  const camadasZerado = [
+    'Seu saldo projetado ainda fecha negativo.',
+    ...(temVale ? ['Existe um vale de caixa antes da próxima entrada.'] : []),
+    ...(temReembolsoPendente ? ['Reembolsos ainda não recebidos podem apertar o mês.'] : []),
+  ];
+
   return (
     <div className="space-y-4">
       {/* HERÓI DUPLO */}
@@ -112,7 +124,16 @@ export function PersonalHeroes({ result }: { result: PersonalMonthResult }) {
           </p>
         )}
 
-        {disponivelPrudente.deducoes.length > 0 && (
+        {zeradoPorSaldoNegativo ? (
+          <div className="mt-3 pt-3 border-t space-y-1.5">
+            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Por que está zerado
+            </p>
+            {camadasZerado.map((linha) => (
+              <p key={linha} className="text-xs text-muted-foreground">{linha}</p>
+            ))}
+          </div>
+        ) : disponivelPrudente.deducoes.length > 0 && (
           <div className="mt-3 pt-3 border-t space-y-1">
             <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Por que não é dinheiro livre
