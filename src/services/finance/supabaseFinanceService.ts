@@ -84,10 +84,14 @@ export class SupabaseFinanceService implements IFinanceService {
     console.log('Service.getActiveWorkspace: buscando para userId', userId);
 
     // Try 1: via workspace_members JOIN
+    // Filtro workspace_type='business' no BANCO (!inner + .eq): com um workspace personal
+    // presente, filtrar no cliente após .limit(1) falharia (o banco poderia devolver o
+    // personal como única linha) — o Business ativo nunca pode ser o workspace pessoal.
     const { data, error } = await supabase
       .from('workspace_members')
-      .select('workspace_id, workspaces(*)')
+      .select('workspace_id, workspaces!inner(*)')
       .eq('user_id', userId)
+      .eq('workspaces.workspace_type', 'business')
       .limit(1);
 
     console.log('Service.getActiveWorkspace members query:', { data, error });
@@ -107,6 +111,7 @@ export class SupabaseFinanceService implements IFinanceService {
       .from('workspaces')
       .select('*')
       .eq('owner_id', userId)
+      .eq('workspace_type', 'business') // fallback também nunca pega o workspace personal
       .limit(1)
       .maybeSingle();
 

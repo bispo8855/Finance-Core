@@ -19,7 +19,7 @@ import { buildPersonalMonth } from '@/domain/personal/personalMonth';
 import { buildPersonalReading } from '@/domain/personal/personalReading';
 import { buildPersonalAlerts } from '@/domain/personal/personalAlerts';
 import { addMonthsISO, monthOf } from '@/domain/personal/cardCycles';
-import { Confidence, PersonalMonthResult, ScenarioTriple } from '@/domain/personal/types';
+import { Confidence, PersonalInputs, PersonalMonthResult, ScenarioTriple } from '@/domain/personal/types';
 import { PersonalHeroes, ConfidenceDot } from '@/components/personal/PersonalHeroes';
 import { PersonalTimeline } from '@/components/personal/PersonalTimeline';
 import {
@@ -53,10 +53,23 @@ function SobraCard({
   );
 }
 
-export default function PersonalOverview() {
+// Props ADITIVAS: sem props → fixture demo (comportamento atual preservado, /personal/demo
+// intacto); com props (rota real) → dados vindos do motor via adapter.
+interface PersonalOverviewProps {
+  inputs?: PersonalInputs;
+  monthISO?: string;
+  today?: string;
+}
+
+export default function PersonalOverview({ inputs, monthISO, today }: PersonalOverviewProps = {}) {
+  const _inputs = inputs ?? PERSONAL_DEMO_INPUTS;
+  const _monthISO = monthISO ?? PERSONAL_DEMO_MONTH;
+  const _today = today ?? PERSONAL_DEMO_TODAY;
+  const isDemo = inputs === undefined; // selo só no caminho da fixture
+
   const result: PersonalMonthResult = useMemo(
-    () => buildPersonalMonth(PERSONAL_DEMO_INPUTS, PERSONAL_DEMO_MONTH, PERSONAL_DEMO_TODAY),
-    [],
+    () => buildPersonalMonth(_inputs, _monthISO, _today),
+    [_inputs, _monthISO, _today],
   );
   const leitura = useMemo(() => buildPersonalReading(result), [result]);
   const alertas = useMemo(() => buildPersonalAlerts(result), [result]);
@@ -64,22 +77,22 @@ export default function PersonalOverview() {
   // Próximos 3 meses: consumo do motor (mês, +1, +2) — nada é derivado aqui.
   const proximosMeses = useMemo(() => {
     const meses = [
-      PERSONAL_DEMO_MONTH,
-      addMonthsISO(PERSONAL_DEMO_MONTH, 1),
-      addMonthsISO(PERSONAL_DEMO_MONTH, 2),
+      _monthISO,
+      addMonthsISO(_monthISO, 1),
+      addMonthsISO(_monthISO, 2),
     ];
     return meses.map((m) => {
       // Nota do mês: filtra os eventos de entrada pela DATA (exibir/ocultar, não é cálculo).
       // Patrimonial no mês tem precedência (valores grandes que explicam o salto do saldo).
-      const eventosNoMes = PERSONAL_DEMO_INPUTS.extraordinaryEvents.filter((e) => monthOf(e.date) === m);
+      const eventosNoMes = _inputs.extraordinaryEvents.filter((e) => monthOf(e.date) === m);
       const nota = eventosNoMes.some((e) => e.klass === 'patrimonial')
         ? 'inclui evento patrimonial'
         : eventosNoMes.length > 0
           ? 'inclui eventos fora da rotina'
           : null;
-      return { monthISO: m, r: buildPersonalMonth(PERSONAL_DEMO_INPUTS, m, PERSONAL_DEMO_TODAY), nota };
+      return { monthISO: m, r: buildPersonalMonth(_inputs, m, _today), nota };
     });
-  }, []);
+  }, [_inputs, _monthISO, _today]);
 
   const { foraDaRotina, jaOcorreuNoMes } = result;
   const temForaDaRotina =
@@ -91,10 +104,12 @@ export default function PersonalOverview() {
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-6 pb-20">
 
-        {/* SELO DE DEMONSTRAÇÃO (obrigatório) */}
-        <div className="rounded-lg border border-dashed bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
-          Demonstração com dados fictícios — ainda não conectado às suas contas.
-        </div>
+        {/* SELO DE DEMONSTRAÇÃO — só no caminho da fixture (nunca com dado real) */}
+        {isDemo && (
+          <div className="rounded-lg border border-dashed bg-muted/40 px-4 py-2.5 text-xs text-muted-foreground">
+            Demonstração com dados fictícios — ainda não conectado às suas contas.
+          </div>
+        )}
 
         {/* CABEÇALHO */}
         <div className="flex flex-col gap-1">

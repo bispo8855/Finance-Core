@@ -31,6 +31,7 @@ import { GlobalErrorBoundary } from "./components/shared/GlobalErrorBoundary";
 
 const PersonalLanding = lazy(() => import("./pages/PersonalLanding"));
 const PersonalOverview = lazy(() => import("./pages/PersonalOverview"));
+const PersonalRealOverview = lazy(() => import("./pages/PersonalRealOverview"));
 
 const Home = () => {
   const { session, isLoading, isPasswordRecovery } = useAuth();
@@ -108,6 +109,10 @@ const App = () => (
                 
                 {/* Rota de Onboarding (protegida, mas sem layout padrão) */}
                 <Route element={<ProtectedRoute><Onboarding /></ProtectedRoute>} path="/onboarding" />
+
+                {/* Aurys Personal (real) — protegida pelo MESMO ProtectedRoute das telas
+                    logadas, porém sem AppLayout (fora do menu do Business, por escopo). */}
+                <Route element={<ProtectedRoute><PersonalRealOverview /></ProtectedRoute>} path="/personal/overview" />
                 
                 {/* Rotas do App (protegidas e com layout) */}
                 <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
