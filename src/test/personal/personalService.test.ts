@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // Mock do cliente Supabase (nativo do vitest — sem lib nova, sem tocar supabaseClient.ts).
 vi.mock('@/lib/supabaseClient', () => ({
-  supabase: { from: vi.fn(), auth: { getSession: vi.fn(), getUser: vi.fn() } },
+  supabase: { from: vi.fn(), rpc: vi.fn(), auth: { getSession: vi.fn(), getUser: vi.fn() } },
 }));
 
 import { supabase } from '@/lib/supabaseClient';
@@ -10,6 +10,7 @@ import { SupabaseFinanceService } from '@/services/finance/supabaseFinanceServic
 import {
   mapAccountRow, mapIncomeRow, mapCardRow, mapCardBillRow, mapFixedCommitmentRow,
   mapInstallmentRow, mapReimbursementRow, mapExtraordinaryEventRow, mapDailySpendingRow,
+  getOrCreatePersonalWorkspace,
 } from '@/services/personal/personalService';
 
 // ============================================================================
@@ -69,6 +70,41 @@ describe('mapeamento row → Persisted* (puro)', () => {
   it('dia a dia: min/normal/heavy string→number; profile preservado', () => {
     const r = mapDailySpendingRow({ id: 'd1', month_iso: '2026-07', min_amount: '3750', normal_amount: '4750', heavy_amount: '6500', profile: 'maioria_cartao', confidence: 'media' });
     expect(r).toMatchObject({ month_iso: '2026-07', min_amount: 3750, normal_amount: 4750, heavy_amount: 6500, profile: 'maioria_cartao' });
+  });
+});
+
+// ============================================================================
+// PARTE 1b — getOrCreatePersonalWorkspace delega à RPC SECURITY DEFINER (0015).
+// O tratamento de corrida/unique_violation vive AGORA na RPC (banco), não no client —
+// o teste do client prova apenas que chama a RPC certa, usa o retorno e nunca cria
+// o workspace pelo .from() (que dispararia o 403 de RLS que a 0015 resolve).
+// A idempotência end-to-end (23505 na RPC) é verificação no banco (manual do Marcelo).
+// ============================================================================
+describe('getOrCreatePersonalWorkspace — via RPC (0015)', () => {
+  beforeEach(() => {
+    vi.mocked(supabase.rpc).mockReset();
+    vi.mocked(supabase.from).mockReset();
+  });
+
+  it('chama a RPC get_or_create_personal_workspace e retorna o workspaceId', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: 'ws-personal-1', error: null } as any);
+    const res = await getOrCreatePersonalWorkspace('u1');
+    expect(supabase.rpc).toHaveBeenCalledWith('get_or_create_personal_workspace');
+    expect(res.workspaceId).toBe('ws-personal-1');
+  });
+
+  it('NUNCA cria o workspace pelo client (nenhum .from) — toda a criação vive na RPC', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: 'ws-personal-1', error: null } as any);
+    await getOrCreatePersonalWorkspace('u1');
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it('propaga erro se a RPC falhar', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    vi.mocked(supabase.rpc).mockResolvedValue({ data: null, error: { message: 'boom' } } as any);
+    await expect(getOrCreatePersonalWorkspace('u1')).rejects.toBeTruthy();
   });
 });
 

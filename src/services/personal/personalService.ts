@@ -81,78 +81,28 @@ export function mapDailySpendingRow(r: Row): PersistedDailySpending {
 }
 
 // --------------------------------------------------------------------------
-// getOrCreatePersonalWorkspace — idempotência garantida pelo BANCO (índice
-// uq_workspaces_owner_personal da 0014), não pela ordem do cliente.
+// getOrCreatePersonalWorkspace — delega à RPC SECURITY DEFINER (migration 0015).
+//
+// Por que RPC e não SELECT→INSERT pelo client: a criação inicial pelo cliente bate num
+// chicken-and-egg de RLS — workspaces SELECT só enxerga workspace de quem já é membro, e
+// workspace_members INSERT exige já ser owner/admin (resultado: 403 no POST /workspaces).
+// O Business escapa porque nasce via trigger handle_new_user() (SECURITY DEFINER) no signup.
+//
+// get_or_create_personal_workspace() roda com privilégios do dono, usa auth.uid()
+// internamente, trata a corrida (unique_violation / índice da 0014) e garante a membership
+// — tudo no banco. O client NUNCA cria o workspace diretamente; só recebe o uuid.
 // --------------------------------------------------------------------------
 export interface EnsureWorkspaceResult {
   workspaceId: string;
-  created: boolean;
 }
 
-async function selectPersonalWorkspaceId(userId: string): Promise<string | null> {
-  // Via membership + join, garantindo workspace_type='personal' no banco.
-  const { data: viaMember } = await supabase
-    .from('workspace_members')
-    .select('workspace_id, workspaces!inner(id, workspace_type)')
-    .eq('user_id', userId)
-    .eq('workspaces.workspace_type', 'personal')
-    .limit(1);
-  if (viaMember && viaMember.length > 0) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const ws = (viaMember[0] as any).workspaces;
-    if (ws?.id) return ws.id as string;
-  }
-  // Fallback por owner_id (caso a membership ainda não exista).
-  const { data: owned } = await supabase
-    .from('workspaces')
-    .select('id')
-    .eq('owner_id', userId)
-    .eq('workspace_type', 'personal')
-    .limit(1)
-    .maybeSingle();
-  return owned?.id ?? null;
-}
-
-async function ensureMembership(workspaceId: string, userId: string): Promise<void> {
-  // UPSERT idempotente: workspace_members tem UNIQUE(workspace_id,user_id) → onConflict ignora duplicata.
-  await supabase
-    .from('workspace_members')
-    .upsert({ workspace_id: workspaceId, user_id: userId, role: 'owner' }, { onConflict: 'workspace_id,user_id' });
-}
-
-export async function getOrCreatePersonalWorkspace(userId: string): Promise<EnsureWorkspaceResult> {
-  // 1. Já existe? Usa o existente.
-  const existing = await selectPersonalWorkspaceId(userId);
-  if (existing) {
-    await ensureMembership(existing, userId);
-    return { workspaceId: existing, created: false };
-  }
-
-  // 2. Não existe → tenta criar.
-  const { data: inserted, error: insertError } = await supabase
-    .from('workspaces')
-    .insert({ owner_id: userId, workspace_type: 'personal', name: 'Pessoal' })
-    .select('id')
-    .single();
-
-  if (insertError) {
-    // 3. 23505 (unique_violation): a trava uq_workspaces_owner_personal (0014) agiu — outra
-    //    execução concorrente ganhou a corrida. Refaz o SELECT e usa o que o outro criou.
-    //    NUNCA propaga o erro; NUNCA cria um segundo workspace personal.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((insertError as any).code === '23505') {
-      const raced = await selectPersonalWorkspaceId(userId);
-      if (raced) {
-        await ensureMembership(raced, userId);
-        return { workspaceId: raced, created: false };
-      }
-    }
-    throw insertError;
-  }
-
-  const workspaceId = inserted!.id as string;
-  await ensureMembership(workspaceId, userId);
-  return { workspaceId, created: true };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function getOrCreatePersonalWorkspace(_userId?: string): Promise<EnsureWorkspaceResult> {
+  // A RPC usa auth.uid() internamente; _userId (do hook) é aceito por compatibilidade e ignorado.
+  const { data, error } = await supabase.rpc('get_or_create_personal_workspace');
+  if (error) throw error;
+  if (!data) throw new Error('get_or_create_personal_workspace retornou vazio');
+  return { workspaceId: data as string };
 }
 
 // --------------------------------------------------------------------------
