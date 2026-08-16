@@ -151,3 +151,39 @@ export async function loadPersonalData(workspaceId: string): Promise<PersistedPe
       : undefined,
   };
 }
+
+// --------------------------------------------------------------------------
+// createPersonalAccount — escrita mínima em personal_accounts (base para o AP4B.3a).
+// Escrita real validada com sessão autenticada: INSERT passou sem 403, gravou no
+// workspace_type='personal' e voltou via loadPersonalData.
+// Só grava; usa o workspace_id recebido (do getOrCreatePersonalWorkspace/RPC).
+// A RLS de personal_accounts (0013) exige workspace_type='personal', então não há
+// como esta escrita cair num workspace business.
+// --------------------------------------------------------------------------
+export interface NewPersonalAccountInput {
+  label: string;
+  currentBalance: number;
+  balanceDate?: string | null;
+  isReserve?: boolean;
+  confidence: 'alta' | 'media' | 'baixa';
+}
+
+export async function createPersonalAccount(
+  workspaceId: string,
+  data: NewPersonalAccountInput,
+): Promise<{ id: string }> {
+  const { data: row, error } = await supabase
+    .from('personal_accounts')
+    .insert({
+      workspace_id: workspaceId,
+      label: data.label,
+      current_balance: data.currentBalance,
+      balance_date: data.balanceDate ?? null,
+      is_reserve: data.isReserve ?? false,
+      confidence: data.confidence,
+    })
+    .select('id')
+    .single();
+  if (error) throw error;
+  return { id: row!.id as string };
+}
