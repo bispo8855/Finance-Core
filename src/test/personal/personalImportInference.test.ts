@@ -52,23 +52,23 @@ describe('inferFromLines — blocos do summary', () => {
     expect(s.gastosVariaveis.total).toBe(45.9);
   });
 
-  it('transferência SEM contrapartida → dúvida para revisão (não vira gasto)', () => {
+  it('trilho sem contraparte identificável → dúvida para revisão (não vira gasto)', () => {
     const s = inferFromLines([
       line('2026-07-15', 'TED transferencia enviada', 500, 'saida'),
     ]);
     expect(s.gastosVariaveis.total).toBe(0);
-    expect(s.transferencias).toHaveLength(0);
-    expect(s.duvidosos.some((d) => d.reason.includes('transferência sem contrapartida'))).toBe(true);
+    expect(s.transferenciasProprias).toHaveLength(0);
+    expect(s.duvidosos.some((d) => d.reason.includes('sem contraparte'))).toBe(true);
   });
 
-  it('transferência COM contrapartida (par entrada/saída) → interna, ignorada do gasto', () => {
+  it('PIX "entre contas" (indício de conta própria) → transferência própria, ignorada', () => {
     const s = inferFromLines([
       line('2026-07-15', 'PIX enviado entre contas', 500, 'saida'),
       line('2026-07-16', 'PIX recebido entre contas', 500, 'entrada'),
     ]);
-    expect(s.transferencias).toHaveLength(2);
+    expect(s.transferenciasProprias).toHaveLength(2);
     expect(s.gastosVariaveis.total).toBe(0);
-    expect(s.rendasProvaveis).toHaveLength(0); // não vira renda
+    expect(s.rendasProvaveis).toHaveLength(0);
   });
 
   it('reembolso/estorno não é renda estrutural', () => {
@@ -94,10 +94,10 @@ describe('inferFromLines — blocos do summary', () => {
     expect(cats['Restaurantes/Delivery']).toBe(250);
     expect(cats['Transporte']).toBe(250);
     // dia a dia = resíduo medido: min 200 (jul), heavy 300 (jun)
-    expect(s.diaADia.porMes).toEqual([{ monthISO: '2026-06', total: 300 }, { monthISO: '2026-07', total: 200 }]);
+    expect(s.diaADia.porMes).toEqual([{ monthISO: '2026-06', total: 300, parcial: true }, { monthISO: '2026-07', total: 200, parcial: true }]);
     expect(s.diaADia.min).toBe(200);
     expect(s.diaADia.heavy).toBe(300);
-    expect(s.diaADia.confidence).toBe('baixa'); // só 2 meses
+    expect(s.diaADia.confidence).toBe('baixa'); // só 2 meses (parciais)
   });
 
   it('período e contagens no summary', () => {
@@ -170,7 +170,7 @@ describe('inferFromLines — blocos do summary', () => {
     ]);
     // ambos recorrem mas são variáveis → entram no resíduo
     expect(s.fixasProvaveis).toHaveLength(0);
-    expect(s.diaADia.porMes).toEqual([{ monthISO: '2026-06', total: 425 }, { monthISO: '2026-07', total: 425 }]);
+    expect(s.diaADia.porMes).toEqual([{ monthISO: '2026-06', total: 425, parcial: true }, { monthISO: '2026-07', total: 425, parcial: true }]);
     expect(s.diaADia.min).toBe(425);
     expect(s.diaADia.heavy).toBe(425);
   });
@@ -181,5 +181,89 @@ describe('inferFromLines — blocos do summary', () => {
     expect(json).not.toContain('sobra');
     expect(json).not.toContain('saldoprojetado');
     expect(json).not.toContain('disponivelprudente');
+  });
+});
+
+describe('AP4C.0.1 — calibração PF/PIX', () => {
+  const titular = 'joao da silva teste';
+
+  it('PIX ENVIADO a terceiro (empresa) → gasto categorizável, não transferência', () => {
+    const s = inferFromLines([line('2026-08-24', 'PIX ENVIADO INTERNET SERVICOS E COBRA', 89.9, 'saida')], { titular });
+    expect(s.transferenciasProprias).toHaveLength(0);
+    // 'internet' → Assinaturas/Serviços (fixa por natureza + descrição) → vira fixa provável
+    expect(s.fixasProvaveis.some((f) => f.description.includes('INTERNET'))).toBe(true);
+    expect(s.duvidosos).toHaveLength(0);
+  });
+
+  it('PIX ENVIADO a pessoa (posto) → gasto, categoria Transporte', () => {
+    const s = inferFromLines([line('2026-08-24', 'PIX ENVIADO AUTO POSTO ITAMARATI LIBE', 118.38, 'saida')], { titular });
+    expect(s.transferenciasProprias).toHaveLength(0);
+    expect(s.gastosVariaveis.byCategory.find((c) => c.category === 'Transporte')?.total).toBe(118.38);
+  });
+
+  it('PIX RECEBIDO de terceiro → recebimento/renda candidata (não transferência)', () => {
+    const s = inferFromLines([
+      line('2026-06-10', 'PIX RECEBIDO Cliente Fulano', 3800, 'entrada'),
+      line('2026-07-10', 'PIX RECEBIDO Cliente Fulano', 3800, 'entrada'),
+    ], { titular });
+    expect(s.transferenciasProprias).toHaveLength(0);
+    expect(s.rendasProvaveis).toHaveLength(1); // recorrente → renda provável
+  });
+
+  it('PIX com nome do TITULAR → transferência própria, ignorada', () => {
+    const s = inferFromLines([line('2026-08-24', 'PIX ENVIADO Joao Da Silva Teste', 150, 'saida')], { titular });
+    expect(s.transferenciasProprias).toHaveLength(1);
+    expect(s.gastosVariaveis.total).toBe(0);
+    expect(s.duvidosos).toHaveLength(0);
+  });
+
+  it('PIX a terceiro SEM contraparte discernível → revisão', () => {
+    const s = inferFromLines([line('2026-08-24', 'PIX ENVIADO', 50, 'saida')], { titular });
+    expect(s.duvidosos.some((d) => d.reason.includes('sem contraparte'))).toBe(true);
+  });
+
+  it('seguro/mensalidade/parcela detecta fixa provável mesmo com 1 mês', () => {
+    const s = inferFromLines([line('2026-08-24', 'MENSALIDADE DE SEGURO Parc 011/012 INCENDIO RES', 51.95, 'saida')], { titular });
+    expect(s.fixasProvaveis).toHaveLength(1);
+    expect(s.fixasProvaveis[0].confidence).toBe('baixa'); // 1 mês, por descrição
+  });
+
+  it('Uber/Mercado continuam variáveis mesmo com termo repetido', () => {
+    const s = inferFromLines([
+      line('2026-06-12', 'UBER *TRIP', 25, 'saida'),
+      line('2026-07-12', 'UBER *TRIP', 25, 'saida'),
+      line('2026-06-15', 'Supermercado Extra', 400, 'saida'),
+      line('2026-07-15', 'Supermercado Extra', 400, 'saida'),
+    ], { titular });
+    expect(s.fixasProvaveis).toHaveLength(0);
+    expect(s.gastosVariaveis.total).toBe(850);
+  });
+
+  it('conta mista PF/PJ gera ALERTA, não classificação forçada', () => {
+    const s = inferFromLines([line('2026-08-24', 'PAGAMENTO A FORNECEDORES', 990, 'entrada')], { titular });
+    expect(s.alertaContaMista).toBeTruthy();
+    expect(s.alertaContaMista).toContain('PF/PJ');
+    expect(s.rendasProvaveis).toHaveLength(0); // não forçou renda
+  });
+
+  it('mês parcial gera issue e confiança baixa no dia a dia', () => {
+    // só agosto, começando dia 10 (mês incompleto) → parcial
+    const s = inferFromLines([
+      line('2026-08-10', 'IFOOD', 40, 'saida'),
+      line('2026-08-20', 'IFOOD', 60, 'saida'),
+    ], { titular });
+    expect(s.period.mesesParciais).toContain('2026-08');
+    expect(s.diaADia.confidence).toBe('baixa');
+    expect(s.diaADia.issues.length).toBeGreaterThan(0);
+  });
+
+  it('saldo é extraído do meta (movimento) e exposto no summary', () => {
+    const s = inferFromLines([line('2026-08-24', 'IFOOD', 40, 'saida')], { titular, accountBalance: 25653.85 });
+    expect(s.saldo).toEqual({ valor: 25653.85, fonte: 'movimento' });
+  });
+
+  it('saldo do rodapé quando não há saldo por movimento', () => {
+    const s = inferFromLines([line('2026-08-24', 'IFOOD', 40, 'saida')], { footerBalance: 1000 });
+    expect(s.saldo).toEqual({ valor: 1000, fonte: 'rodape' });
   });
 });
