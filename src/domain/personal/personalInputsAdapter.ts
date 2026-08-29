@@ -62,6 +62,10 @@ export interface PersistedDailySpending {
 }
 export interface PersistedSettings {
   workspace_id?: string; onboarding_completed_at?: string | null; anchor_month?: string | null;
+  // Flags do onboarding (migration 0016). Lidos de volta para não ficarem write-only.
+  // O motor AP2 NÃO os usa (opera com arrays vazios); servem só ao fluxo de onboarding.
+  declared_no_cards?: boolean;
+  declared_no_fixed_commitments?: boolean;
 }
 
 export interface PersistedPersonalData {

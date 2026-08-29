@@ -10,7 +10,7 @@ import { SupabaseFinanceService } from '@/services/finance/supabaseFinanceServic
 import {
   mapAccountRow, mapIncomeRow, mapCardRow, mapCardBillRow, mapFixedCommitmentRow,
   mapInstallmentRow, mapReimbursementRow, mapExtraordinaryEventRow, mapDailySpendingRow,
-  getOrCreatePersonalWorkspace,
+  mapSettingsRow, getOrCreatePersonalWorkspace,
 } from '@/services/personal/personalService';
 
 // ============================================================================
@@ -70,6 +70,37 @@ describe('mapeamento row → Persisted* (puro)', () => {
   it('dia a dia: min/normal/heavy string→number; profile preservado', () => {
     const r = mapDailySpendingRow({ id: 'd1', month_iso: '2026-07', min_amount: '3750', normal_amount: '4750', heavy_amount: '6500', profile: 'maioria_cartao', confidence: 'media' });
     expect(r).toMatchObject({ month_iso: '2026-07', min_amount: 3750, normal_amount: 4750, heavy_amount: 6500, profile: 'maioria_cartao' });
+  });
+});
+
+// ============================================================================
+// PARTE 1a — mapSettingsRow: flags do onboarding (0016) lidos de volta em camelCase.
+// Prova que declared_no_cards/declared_no_fixed_commitments NÃO ficam write-only.
+// ============================================================================
+describe('mapSettingsRow — flags 0016 em camelCase', () => {
+  it('converte declared_no_cards/declared_no_fixed_commitments → camelCase', () => {
+    const s = mapSettingsRow({
+      workspace_id: 'ws1', onboarding_completed_at: '2026-08-16T12:00:00Z', anchor_month: '2026-08',
+      declared_no_cards: true, declared_no_fixed_commitments: false,
+    });
+    expect(s).toEqual({
+      workspaceId: 'ws1', onboardingCompletedAt: '2026-08-16T12:00:00Z', anchorMonth: '2026-08',
+      declaredNoCards: true, declaredNoFixedCommitments: false,
+    });
+  });
+
+  it('flags ausentes/null → default false', () => {
+    const s = mapSettingsRow({ workspace_id: 'ws1', declared_no_cards: null });
+    expect(s.declaredNoCards).toBe(false);
+    expect(s.declaredNoFixedCommitments).toBe(false);
+    expect(s.onboardingCompletedAt).toBeNull();
+    expect(s.anchorMonth).toBeNull();
+  });
+
+  it('ambos true', () => {
+    const s = mapSettingsRow({ declared_no_cards: true, declared_no_fixed_commitments: true });
+    expect(s.declaredNoCards).toBe(true);
+    expect(s.declaredNoFixedCommitments).toBe(true);
   });
 });
 
