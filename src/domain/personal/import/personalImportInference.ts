@@ -21,6 +21,20 @@ export interface InferredFixed { key: string; description: string; amount: numbe
 export interface CategoryTotal { category: PersonalCategory; total: number; count: number; }
 export interface Flagged { line: LineRef; reason: string; }
 
+export type ImportItemKind = 'renda' | 'fixa' | 'variavel' | 'transferencia_propria' | 'pagamento_fatura' | 'ignorado' | 'duvidoso';
+/** Classificação POR LINHA (1 por movimento) — base dos import_items do staging. */
+export interface ImportItemSeed {
+  sourceRow: number;
+  date: string;
+  description: string;
+  amount: number;
+  direction: 'entrada' | 'saida';
+  kind: ImportItemKind;
+  category: PersonalCategory | null;
+  confidence: 'alta' | 'media' | 'baixa';
+  reason: string;
+}
+
 export interface ImportSummary {
   period: { from: string; to: string; months: string[]; mesesParciais: string[] };
   counts: { linhas: number; rendas: number; fixas: number; transferenciasProprias: number; pagamentosFatura: number; variaveis: number; ignorados: number; duvidosos: number };
@@ -35,6 +49,7 @@ export interface ImportSummary {
   ignorados: Flagged[];
   duvidosos: Flagged[];
   diaADia: { porMes: { monthISO: string; total: number; parcial: boolean }[]; min: number; normal: number; heavy: number; confidence: 'alta' | 'media' | 'baixa'; issues: string[] };
+  itens: ImportItemSeed[]; // classificação por linha (base dos import_items) — não recalcula, só expõe
 }
 
 export interface InferMeta { titular?: string | null; accountBalance?: number | null; footerBalance?: number | null; }
@@ -102,21 +117,25 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
   const duvidosos: Flagged[] = [];
   const expenseCandidates: NormalizedLine[] = [];
   const incomeCandidates: NormalizedLine[] = [];
+  const itens: ImportItemSeed[] = [];
   let alertaContaMista: string | null = null;
+
+  const seed = (l: NormalizedLine, kind: ImportItemKind, category: PersonalCategory | null, confidence: ImportItemSeed['confidence'], reason: string) =>
+    itens.push({ sourceRow: l.sourceRow, date: l.date, description: l.description, amount: l.amount, direction: l.direction, kind, category, confidence, reason });
 
   for (const l of valid) {
     const norm = normalizeDescription(l.description);
     if (has(norm, MIXED_TERMS)) alertaContaMista = 'Esta conta parece ter uso misto PF/PJ. Confirmar antes de classificar renda/despesa.';
-    if (l.issues.length > 0) { duvidosos.push({ line: ref(l), reason: `parsing incerto: ${l.issues.join(', ')}` }); continue; }
-    if (has(norm, FATURA)) { pagamentosFatura.push(ref(l)); continue; }
-    if (has(norm, REEMBOLSO)) { ignorados.push({ line: ref(l), reason: 'estorno/reembolso — não é renda estrutural nem despesa de rotina' }); continue; }
+    if (l.issues.length > 0) { const r = `parsing incerto: ${l.issues.join(', ')}`; duvidosos.push({ line: ref(l), reason: r }); seed(l, 'duvidoso', null, 'baixa', r); continue; }
+    if (has(norm, FATURA)) { pagamentosFatura.push(ref(l)); seed(l, 'pagamento_fatura', null, 'alta', 'pagamento de fatura — não é nova despesa'); continue; }
+    if (has(norm, REEMBOLSO)) { const r = 'estorno/reembolso — não é renda estrutural nem despesa de rotina'; ignorados.push({ line: ref(l), reason: r }); seed(l, 'ignorado', null, 'media', r); continue; }
 
     if (RAIL_RE.test(norm)) {
       // Trilho de pagamento NEUTRO — decide a contraparte, não o trilho.
-      if (isTitular(norm, titularTokens) || has(norm, OWN_HINTS)) { transferenciasProprias.push(ref(l)); continue; }
+      if (isTitular(norm, titularTokens) || has(norm, OWN_HINTS)) { transferenciasProprias.push(ref(l)); seed(l, 'transferencia_propria', null, 'alta', 'PIX/TED com o próprio titular ou entre contas próprias'); continue; }
       const cp = counterpartTokens(norm, titularTokens);
       if (cp.length >= 1) { (l.direction === 'saida' ? expenseCandidates : incomeCandidates).push(l); }
-      else { duvidosos.push({ line: ref(l), reason: 'transferência/PIX sem contraparte identificável — revisar (gasto, renda ou transferência?)' }); }
+      else { const r = 'transferência/PIX sem contraparte identificável — revisar (gasto, renda ou transferência?)'; duvidosos.push({ line: ref(l), reason: r }); seed(l, 'duvidoso', null, 'baixa', r); }
       continue;
     }
     (l.direction === 'saida' ? expenseCandidates : incomeCandidates).push(l);
@@ -142,6 +161,7 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
       if (FIXED_LOWER_CONF.has(cat)) conf = 'baixa';
       const reason = recurring && fixedByNature ? 'recorrente e categoria fixa por natureza' : 'descrição indica compromisso fixo (mensalidade/seguro/parcela)';
       fixasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths.sort(), dayOfMonth: mode(group.map((l) => dayOf(l.date))), confidence: conf, reason });
+      for (const l of group) seed(l, 'fixa', cat, conf, reason);
     } else {
       variableLines.push(...group);
     }
@@ -154,11 +174,15 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
     const rep = median(group.map((l) => l.amount));
     const isSalary = group.some((l) => has(normalizeDescription(l.description), SALARIO));
     if (distinctMonths.length >= 2) {
-      rendasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths.sort(), confidence: distinctMonths.length >= 3 ? 'alta' : 'media', reason: 'crédito recorrente em vários meses' });
+      const conf = distinctMonths.length >= 3 ? 'alta' : 'media';
+      rendasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths.sort(), confidence: conf, reason: 'crédito recorrente em vários meses' });
+      for (const l of group) seed(l, 'renda', null, conf, 'crédito recorrente em vários meses');
     } else if (isSalary) {
       rendasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths, confidence: 'media', reason: 'descrição indica salário/provento' });
+      for (const l of group) seed(l, 'renda', null, 'media', 'descrição indica salário/provento');
     } else {
-      for (const l of group) duvidosos.push({ line: ref(l), reason: 'crédito avulso sem recorrência nem indício de salário — revisar (recebimento? venda? renda?)' });
+      const r = 'crédito avulso sem recorrência nem indício de salário — revisar (recebimento? venda? renda?)';
+      for (const l of group) { duvidosos.push({ line: ref(l), reason: r }); seed(l, 'duvidoso', null, 'baixa', r); }
     }
   }
 
@@ -172,6 +196,7 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
     const cat = categorize(l.description).category;
     const cur = catMap.get(cat) ?? { category: cat, total: 0, count: 0 };
     cur.total += l.amount; cur.count += 1; catMap.set(cat, cur);
+    seed(l, 'variavel', cat, 'media', 'gasto variável (dia a dia)');
   }
   const byCategory = [...catMap.values()].sort((a, b) => b.total - a.total);
 
@@ -208,5 +233,6 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
     gastosVariaveis: { total: Math.round(variaveisTotal * 100) / 100, byCategory },
     categoriasTop: byCategory.slice(0, 5),
     ignorados, duvidosos, diaADia,
+    itens: itens.sort((a, b) => a.sourceRow - b.sourceRow),
   };
 }
