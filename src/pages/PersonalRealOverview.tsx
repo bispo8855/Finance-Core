@@ -11,6 +11,7 @@
 // Dados mínimos = pelo menos 1 CONTA e 1 RENDA (sem os dois não há trajetória possível).
 // ============================================================================
 
+import { Link } from 'react-router-dom';
 import PersonalOverview from './PersonalOverview';
 import { usePersonalData } from '@/hooks/personal/usePersonalData';
 
@@ -85,6 +86,17 @@ export default function PersonalRealOverview() {
               • Ao menos uma fonte de renda
             </li>
           </ul>
+          <div className="mt-5 flex flex-wrap items-center gap-3">
+            <Link
+              to="/personal/import"
+              className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+            >
+              Importar extrato
+            </Link>
+            <span className="text-xs text-muted-foreground">
+              Envie um extrato CSV/XLSX e o Aurys pré-organiza tudo para você revisar.
+            </span>
+          </div>
           <p className="mt-4 text-xs text-muted-foreground/70">
             Enquanto isso, você pode conferir a demonstração em <span className="font-medium">/personal/demo</span>.
           </p>
