@@ -8,6 +8,7 @@
 import { PersonalInputs, Confidence } from './types';
 import { worst } from './confidence';
 import { monthOf } from './cardCycles';
+import { resolveDaily } from './calendar';
 
 function fixedActiveInMonth(f: PersonalInputs['fixedCommitments'][number], monthISO: string): boolean {
   return !f.activeUntil || monthISO <= monthOf(f.activeUntil);
@@ -46,7 +47,11 @@ export function recommendedReserve(
   const inadiaveis = inputs.installments
     .filter((p) => !p.reimbursable && installmentActiveInMonth(p, monthISO))
     .reduce((s, p) => s + Math.abs(p.monthlyAmount), 0);
-  const ds = inputs.dailySpending.find((d) => d.monthISO === monthISO);
+  // Mesma resolução do restante do motor (surplus.ts): usa o daily exato do mês
+  // e, se faltar, HERDA a última estimativa conhecida (confiança rebaixada) —
+  // nunca cai em 0 silencioso quando existe estimativa. Só é null (→ 0) quando
+  // não há NENHUM dailySpending conhecido (não se inventa média de mercado).
+  const ds = resolveDaily(inputs, monthISO);
   const diaMin = ds ? ds.min : 0;
 
   const custoEssencialMensal = essenciais + inadiaveis + diaMin;
