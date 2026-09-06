@@ -39,8 +39,14 @@ export default function PersonalImport() {
       {status === 'done' && result ? (
         <div className="space-y-6">
           <AurysFindings summary={result.summary} titularRaw={result.titularRaw} fileName={result.fileName} />
-          <div className="space-y-2">
-            <div>
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                to={`/personal/import/review/${result.batchId}`}
+                className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+              >
+                Revisar e aplicar
+              </Link>
               <button
                 type="button"
                 onClick={reset}
@@ -50,7 +56,7 @@ export default function PersonalImport() {
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
-              A revisão e a aplicação do que o Aurys encontrou chegam no próximo passo.
+              Nada é aplicado agora — você confirma cada item na próxima etapa.
             </p>
           </div>
         </div>

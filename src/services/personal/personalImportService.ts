@@ -80,6 +80,21 @@ export async function updateImportItemDecision(itemId: string, patch: { userDeci
   if (error) throw error;
 }
 
+/** Persiste o escopo PF/PJ escolhido na revisão (account_scope). Sem migration. */
+export async function setImportBatchScope(batchId: string, scope: 'pessoal' | 'misto' | 'negocio'): Promise<void> {
+  const { error } = await supabase.from('personal_import_batches').update({ account_scope: scope }).eq('id', batchId);
+  if (error) throw error;
+}
+
+/** Auditoria: grava as decisões do usuário por item (confirmado/corrigido/ignorado). */
+export async function persistItemDecisions(
+  writes: { itemId: string; userDecision: 'confirmado' | 'corrigido' | 'ignorado'; userKind?: string | null; userCategory?: string | null }[],
+): Promise<void> {
+  for (const w of writes) {
+    await updateImportItemDecision(w.itemId, { userDecision: w.userDecision, userKind: w.userKind, userCategory: w.userCategory });
+  }
+}
+
 /** Marca o batch como aplicado. Guarda: batch já 'applied' NÃO reaplica. retention ~12 meses. */
 export async function markImportBatchApplied(batchId: string): Promise<void> {
   const { data: cur, error: e0 } = await supabase.from('personal_import_batches').select('status').eq('id', batchId).single();
