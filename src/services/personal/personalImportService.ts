@@ -7,6 +7,11 @@
 import { supabase } from '@/lib/supabaseClient';
 import { ImportSummary } from '@/domain/personal/import/personalImportInference';
 import { mapImportSummaryToBatch, mapImportSummaryToStagingItems } from '@/domain/personal/import/importStaging';
+import { ApplyPlan, ApplyExecutorDeps, ApplyResult, runApplyPlan } from '@/domain/personal/import/applyPlan';
+import {
+  createPersonalAccount, updatePersonalAccount, createPersonalIncome,
+  createPersonalFixedCommitment, upsertPersonalDailySpending, upsertPersonalSettings,
+} from '@/services/personal/personalService';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -100,4 +105,48 @@ export async function upsertCategoryRule(workspaceId: string, r: { matchType?: '
     workspace_id: workspaceId, match_type: r.matchType ?? 'contains', pattern: r.pattern, category: r.category, source: r.source ?? 'user',
   }, { onConflict: 'workspace_id,match_type,pattern' });
   if (error) throw error;
+}
+
+// ==========================================================================
+// AP4C.1c-1 — EXECUTOR da aplicação (applyBatch). Grava provenance nos items
+// (applied_to_table/applied_to_id) e a conta destino no batch. Só marca o batch
+// 'applied' no fim (via markImportBatchApplied, que já barra reaplicação).
+// A LÓGICA vive no planner/executor puro (applyPlan.ts); aqui só o cabeamento.
+// ==========================================================================
+
+/** Vincula import_items a um alvo aplicado (idempotente por retry). */
+export async function linkImportItemsToTarget(itemIds: string[], table: string, targetId: string): Promise<void> {
+  if (itemIds.length === 0) return;
+  const { error } = await supabase.from('personal_import_items')
+    .update({ applied_to_table: table, applied_to_id: targetId })
+    .in('id', itemIds);
+  if (error) throw error;
+}
+
+/** Grava a conta destino do saldo no batch (rastreio; FK composta workspace-safe). */
+export async function setImportBatchAppliedAccount(batchId: string, accountId: string): Promise<void> {
+  const { error } = await supabase.from('personal_import_batches')
+    .update({ applied_account_id: accountId }).eq('id', batchId);
+  if (error) throw error;
+}
+
+/**
+ * Aplica um plano já construído (buildApplyPlan). Cabeamento das deps reais;
+ * a ordem/guardas/retry vivem em runApplyPlan. `depsOverride` só p/ teste.
+ */
+export async function applyBatch(plan: ApplyPlan, depsOverride?: Partial<ApplyExecutorDeps>): Promise<ApplyResult> {
+  const ws = plan.workspaceId;
+  const deps: ApplyExecutorDeps = {
+    createAccount: (p) => createPersonalAccount(ws, { label: p.label, currentBalance: p.currentBalance, balanceDate: p.balanceDate, confidence: p.confidence }),
+    updateAccount: (id, patch) => updatePersonalAccount(id, { currentBalance: patch.currentBalance, balanceDate: patch.balanceDate, confidence: patch.confidence }),
+    createIncome: (p) => createPersonalIncome(ws, { label: p.label, amount: p.amount, dayOfMonth: p.dayOfMonth, frequency: p.frequency, nature: p.nature, confidence: p.confidence }),
+    createFixed: (p) => createPersonalFixedCommitment(ws, { label: p.label, amount: p.amount, dayOfMonth: p.dayOfMonth, payMethod: p.payMethod, essential: p.essential, confidence: p.confidence }),
+    upsertDaily: (p) => upsertPersonalDailySpending(ws, { monthISO: p.monthISO, minAmount: p.minAmount, normalAmount: p.normalAmount, heavyAmount: p.heavyAmount, profile: p.profile, confidence: p.confidence }),
+    upsertSettings: (p) => upsertPersonalSettings(ws, { onboardingCompletedAt: p.onboardingCompletedAt }),
+    linkItems: linkImportItemsToTarget,
+    setBatchAppliedAccount: setImportBatchAppliedAccount,
+    markBatchApplied: markImportBatchApplied,
+    ...depsOverride,
+  };
+  return runApplyPlan(plan, deps);
 }
