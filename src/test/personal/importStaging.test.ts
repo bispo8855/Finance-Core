@@ -50,6 +50,52 @@ describe('mapImportSummaryToStagingItems — ImportSummary vira import_items com
       expect(i).not.toHaveProperty('user_decision');
     }
   });
+
+  it('mapper propaga group_key vindo da inferência (sem rederivar)', () => {
+    const summary = sampleSummary();
+    // O mapper deve refletir exatamente o groupKey de cada seed, item a item.
+    const rows = mapImportSummaryToStagingItems(summary);
+    for (const row of rows) {
+      const seed = summary.itens.find((i) => i.sourceRow === row.source_row)!;
+      expect(row.group_key).toBe(seed.groupKey);
+    }
+  });
+});
+
+describe('groupKey — identidade congelada de renda/fixa na inferência', () => {
+  const s = sampleSummary();
+  const byKind = (k: string) => s.itens.filter((i) => i.kind === k);
+
+  it('movimentos da MESMA renda compartilham o mesmo groupKey', () => {
+    const rendas = byKind('renda');
+    expect(rendas.length).toBe(2);
+    expect(rendas[0].groupKey).toBeTruthy();
+    expect(rendas[0].groupKey).toBe(rendas[1].groupKey);
+    expect(rendas[0].groupKey).toMatch(/^renda:/);
+  });
+
+  it('movimentos da MESMA fixa compartilham o mesmo groupKey', () => {
+    const fixas = byKind('fixa');
+    expect(fixas.length).toBe(2);
+    expect(fixas[0].groupKey).toBe(fixas[1].groupKey);
+    expect(fixas[0].groupKey).toMatch(/^fixa:/);
+  });
+
+  it('grupos diferentes (renda vs fixa) recebem groupKeys diferentes', () => {
+    expect(byKind('renda')[0].groupKey).not.toBe(byKind('fixa')[0].groupKey);
+  });
+
+  it('kinds que não formam grupo aplicável têm groupKey null', () => {
+    for (const k of ['variavel', 'pagamento_fatura', 'transferencia_propria', 'ignorado', 'duvidoso']) {
+      for (const i of byKind(k)) expect(i.groupKey).toBeNull();
+    }
+  });
+
+  it('a chave é estável entre execuções (mesma entrada → mesma chave)', () => {
+    const a = sampleSummary().itens.filter((i) => i.kind === 'fixa')[0].groupKey;
+    const b = sampleSummary().itens.filter((i) => i.kind === 'fixa')[0].groupKey;
+    expect(a).toBe(b);
+  });
 });
 
 describe('mapImportSummaryToBatch', () => {

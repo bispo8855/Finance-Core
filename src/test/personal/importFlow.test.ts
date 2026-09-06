@@ -127,9 +127,12 @@ describe('escopo AP4C.1b — arquivos novos não aplicam nem tocam o proibido', 
     expect(read('src/App.tsx')).toContain('PersonalImport');
   });
 
-  it('nenhuma migration nova foi criada (0018+ inexistente)', () => {
+  it('a UI de importação (1b) não introduz migration; 0018 é o contrato da 1c e não há 0019+', () => {
     const migs = fs.readdirSync(path.resolve(root, 'supabase/migrations'));
-    expect(migs.some((m) => /^0018/.test(m))).toBe(false);
+    // A migration 0018 pertence ao contrato de aplicação (AP4C.1c-0.1), não à UI.
+    expect(migs.some((m) => /^0018/.test(m))).toBe(true);
+    // Nada além disso ainda: a aplicação/planner (1c-1+) não criou schema novo.
+    expect(migs.some((m) => /^0019/.test(m))).toBe(false);
   });
 });
 

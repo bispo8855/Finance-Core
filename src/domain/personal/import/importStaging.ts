@@ -17,6 +17,7 @@ export interface StagingItemRow {
   inferred_category: string | null;
   confidence: 'alta' | 'media' | 'baixa';
   reason: string;
+  group_key: string | null; // identidade congelada do grupo (renda/fixa); NÃO rederivar
 }
 
 /** Campos de personal_import_batches derivados do summary (sem ids/arquivo). */
@@ -42,6 +43,7 @@ export function mapImportSummaryToStagingItems(summary: ImportSummary): StagingI
     inferred_category: i.category,
     confidence: i.confidence,
     reason: i.reason,
+    group_key: i.groupKey, // propaga a chave congelada; sem recálculo no apply-time
   }));
 }
 

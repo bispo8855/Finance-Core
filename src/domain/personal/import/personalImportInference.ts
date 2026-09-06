@@ -33,6 +33,11 @@ export interface ImportItemSeed {
   category: PersonalCategory | null;
   confidence: 'alta' | 'media' | 'baixa';
   reason: string;
+  // Identidade CONGELADA do grupo que formou uma renda/fixa (mesma chave usada
+  // para montar rendasProvaveis/fixasProvaveis). NULL para movimentos que não
+  // formam grupo aplicável (variável/transferência/dúvida/ignorado/fatura).
+  // Nunca deve ser rederivada no apply-time — é gravada como group_key.
+  groupKey: string | null;
 }
 
 export interface ImportSummary {
@@ -120,8 +125,8 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
   const itens: ImportItemSeed[] = [];
   let alertaContaMista: string | null = null;
 
-  const seed = (l: NormalizedLine, kind: ImportItemKind, category: PersonalCategory | null, confidence: ImportItemSeed['confidence'], reason: string) =>
-    itens.push({ sourceRow: l.sourceRow, date: l.date, description: l.description, amount: l.amount, direction: l.direction, kind, category, confidence, reason });
+  const seed = (l: NormalizedLine, kind: ImportItemKind, category: PersonalCategory | null, confidence: ImportItemSeed['confidence'], reason: string, groupKey: string | null = null) =>
+    itens.push({ sourceRow: l.sourceRow, date: l.date, description: l.description, amount: l.amount, direction: l.direction, kind, category, confidence, reason, groupKey });
 
   for (const l of valid) {
     const norm = normalizeDescription(l.description);
@@ -161,7 +166,8 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
       if (FIXED_LOWER_CONF.has(cat)) conf = 'baixa';
       const reason = recurring && fixedByNature ? 'recorrente e categoria fixa por natureza' : 'descrição indica compromisso fixo (mensalidade/seguro/parcela)';
       fixasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths.sort(), dayOfMonth: mode(group.map((l) => dayOf(l.date))), confidence: conf, reason });
-      for (const l of group) seed(l, 'fixa', cat, conf, reason);
+      // group_key congelado: mesma identidade (key) que formou esta fixa.
+      for (const l of group) seed(l, 'fixa', cat, conf, reason, `fixa:${key}`);
     } else {
       variableLines.push(...group);
     }
@@ -176,10 +182,11 @@ export function inferFromLines(lines: NormalizedLine[], meta: InferMeta = {}): I
     if (distinctMonths.length >= 2) {
       const conf = distinctMonths.length >= 3 ? 'alta' : 'media';
       rendasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths.sort(), confidence: conf, reason: 'crédito recorrente em vários meses' });
-      for (const l of group) seed(l, 'renda', null, conf, 'crédito recorrente em vários meses');
+      // group_key congelado: mesma identidade (key) que formou esta renda.
+      for (const l of group) seed(l, 'renda', null, conf, 'crédito recorrente em vários meses', `renda:${key}`);
     } else if (isSalary) {
       rendasProvaveis.push({ key, description: group[0].description, amount: rep, occurrences: group.length, months: distinctMonths, confidence: 'media', reason: 'descrição indica salário/provento' });
-      for (const l of group) seed(l, 'renda', null, 'media', 'descrição indica salário/provento');
+      for (const l of group) seed(l, 'renda', null, 'media', 'descrição indica salário/provento', `renda:${key}`);
     } else {
       const r = 'crédito avulso sem recorrência nem indício de salário — revisar (recebimento? venda? renda?)';
       for (const l of group) { duvidosos.push({ line: ref(l), reason: r }); seed(l, 'duvidoso', null, 'baixa', r); }
