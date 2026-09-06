@@ -16,6 +16,12 @@ function fmtMonth(iso: string): string {
   return `${m}/${y}`;
 }
 
+/** Data ISO (YYYY-MM-DD) → pt-BR (DD/MM/YYYY). Vazio/ilegível vira travessão. */
+function fmtDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || '—';
+}
+
 interface BlockProps {
   title: string;
   count?: number;
@@ -69,7 +75,7 @@ export default function AurysFindings({ summary, titularRaw, fileName }: AurysFi
         <p className="mt-3 text-xs text-muted-foreground/80">
           {fileName ? <>Arquivo: <span className="font-medium">{fileName}</span>. </> : null}
           {titularRaw ? <>Titular identificado: <span className="font-medium">{titularRaw}</span>. </> : null}
-          Período {s.period.from || '—'} a {s.period.to || '—'} · {s.counts.linhas} lançamentos lidos.
+          Período {fmtDate(s.period.from)} a {fmtDate(s.period.to)} · {s.counts.linhas} lançamentos lidos.
         </p>
       </div>
 
@@ -144,11 +150,11 @@ export default function AurysFindings({ summary, titularRaw, fileName }: AurysFi
           hint="O dia a dia, por categoria."
         >
           {s.gastosVariaveis.byCategory.length > 0 && (
-            <ul className="mt-3 space-y-1">
+            <ul className="mt-3 space-y-1.5">
               {s.gastosVariaveis.byCategory.slice(0, 6).map((c) => (
-                <li key={c.category} className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">{c.category}</span>
-                  <span className="tabular-nums font-medium">{brl(c.total)}</span>
+                <li key={c.category} className="flex items-baseline justify-between gap-4 text-xs">
+                  <span className="truncate text-muted-foreground">{c.category}</span>
+                  <span className="shrink-0 tabular-nums font-medium">{brl(c.total)}</span>
                 </li>
               ))}
             </ul>

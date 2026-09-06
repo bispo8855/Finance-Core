@@ -39,17 +39,19 @@ export default function PersonalImport() {
       {status === 'done' && result ? (
         <div className="space-y-6">
           <AurysFindings summary={result.summary} titularRaw={result.titularRaw} fileName={result.fileName} />
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={reset}
-              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
-            >
-              Enviar outro extrato
-            </button>
-            <span className="text-xs text-muted-foreground">
+          <div className="space-y-2">
+            <div>
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-muted"
+              >
+                Enviar outro extrato
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
               A revisão e a aplicação do que o Aurys encontrou chegam no próximo passo.
-            </span>
+            </p>
           </div>
         </div>
       ) : (

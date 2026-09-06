@@ -65,6 +65,15 @@ describe('AurysFindings — renderiza os blocos a partir do ImportSummary', () =
     expect(t).not.toContain('Período parcial');
   });
 
+  it('formata o período em pt-BR (DD/MM/YYYY), sem data ISO visível', () => {
+    // summaryMistoParcial vai de 2026-06-05 a 2026-07-15.
+    const t = render(<AurysFindings summary={summaryMistoParcial()} />).container.textContent ?? '';
+    expect(t).toContain('05/06/2026');
+    expect(t).toContain('15/07/2026');
+    expect(t).not.toContain('2026-06-05');
+    expect(t).not.toContain('2026-07-15');
+  });
+
   it('mostra o saldo encontrado e a fonte quando o summary trouxer saldo', () => {
     const t = render(<AurysFindings summary={summaryMistoParcial()} />).container.textContent ?? '';
     expect(t).toContain('Saldo encontrado');

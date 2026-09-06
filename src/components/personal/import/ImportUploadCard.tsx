@@ -36,7 +36,7 @@ export default function ImportUploadCard({ onFile, isProcessing, error }: Import
       <div
         role="button"
         tabIndex={0}
-        aria-label="Enviar extrato (CSV ou XLSX)"
+        aria-label="Enviar extrato (CSV ou Excel)"
         onClick={() => !isProcessing && inputRef.current?.click()}
         onKeyDown={(e) => {
           if ((e.key === 'Enter' || e.key === ' ') && !isProcessing) inputRef.current?.click();
@@ -69,7 +69,7 @@ export default function ImportUploadCard({ onFile, isProcessing, error }: Import
             <p className="text-sm font-medium">
               Arraste o arquivo aqui ou <span className="text-primary underline">clique para escolher</span>
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">Formatos aceitos: CSV ou XLSX.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Formatos aceitos: CSV ou Excel.</p>
           </>
         )}
       </div>

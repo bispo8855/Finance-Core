@@ -71,7 +71,7 @@ export function usePersonalImport(): UsePersonalImportResult {
       if (parse.summary.counts.linhas === 0) {
         setError(
           parse.parseIssues[0] ??
-            'Não consegui ler os lançamentos (data / descrição / valor). Confira se o arquivo é um extrato CSV/XLSX.',
+            'Não consegui ler os lançamentos (data / descrição / valor). Confira se o arquivo é um extrato CSV ou Excel.',
         );
         setStatus('error');
         return;
