@@ -12,6 +12,11 @@ import {
 import { PlanPreview } from '@/domain/personal/import/reviewDecisions';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+const plural = (n: number, sing: string, plur: string) => `${n} ${n === 1 ? sing : plur}`;
+const fmtDate = (iso: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso || '—';
+};
 
 export interface ReviewPanelProps {
   summary: ImportSummary;
@@ -195,31 +200,58 @@ export default function ReviewPanel(p: ReviewPanelProps) {
             const material = s.gastosVariaveis.total > 0 && saidas.reduce((a, d) => a + d.line.amount, 0) / s.gastosVariaveis.total > 0.10;
             return (
               <section className="rounded-xl border bg-muted/40 p-4 text-sm">
-                <p className="text-muted-foreground">{s.duvidosos.length} itens · {brl(total)} ficaram em dúvida e não entram na leitura.</p>
-                <p className="mt-1 text-xs text-muted-foreground">{entradas.length} entradas · {saidas.length} saídas.</p>
+                <p className="text-muted-foreground">{plural(s.duvidosos.length, 'item', 'itens')} · {brl(total)} {s.duvidosos.length === 1 ? 'ficou' : 'ficaram'} em dúvida e não {s.duvidosos.length === 1 ? 'entra' : 'entram'} na leitura.</p>
+                <p className="mt-1 text-xs text-muted-foreground">{plural(entradas.length, 'entrada', 'entradas')} · {plural(saidas.length, 'saída', 'saídas')}.</p>
                 {material && <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">Há saídas em dúvida relevantes — isso reduz a confiança do dia a dia.</p>}
               </section>
             );
           })()}
 
-          {/* DIA A DIA */}
+          {/* DIA A DIA — apresentação depende de quantos meses COMPLETOS há */}
           {p.daily.hasCandidate && (
             <section className="rounded-xl border bg-card p-4">
               <h2 className="text-sm font-semibold">Dia a dia (gastos variáveis)</h2>
-              <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
-                <div><div className="text-xs text-muted-foreground">Mês leve</div><div className="tabular-nums font-medium">{brl(p.daily.min)}</div></div>
-                <div><div className="text-xs text-muted-foreground">Mês normal</div><div className="tabular-nums font-medium">{brl(p.daily.normal)}</div></div>
-                <div><div className="text-xs text-muted-foreground">Mês pesado</div><div className="tabular-nums font-medium">{brl(p.daily.heavy)}</div></div>
-              </div>
+
+              {p.daily.completeMonths === 0 && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground">Dia a dia observado</p>
+                  <p className="tabular-nums text-lg font-bold">{brl(s.gastosVariaveis.total)}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Período observado: {fmtDate(s.period.from)} a {fmtDate(s.period.to)}
+                  </p>
+                  <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    Período insuficiente para estimar um mês típico. Importe pelo menos um mês completo para melhorar essa leitura.
+                  </p>
+                </div>
+              )}
+
+              {p.daily.completeMonths === 1 && (
+                <div className="mt-2">
+                  <p className="text-xs text-muted-foreground">Estimativa de dia a dia</p>
+                  <p className="tabular-nums text-lg font-bold">{brl(p.daily.normal)}<span className="text-xs font-normal text-muted-foreground">/mês</span></p>
+                  <p className="mt-1 text-xs text-muted-foreground">Baseado em apenas 1 mês completo — confiança baixa.</p>
+                </div>
+              )}
+
+              {p.daily.completeMonths >= 2 && (
+                <div className="mt-2 grid grid-cols-3 gap-2 text-center text-sm">
+                  <div><div className="text-xs text-muted-foreground">Mês leve</div><div className="tabular-nums font-medium">{brl(p.daily.min)}</div></div>
+                  <div><div className="text-xs text-muted-foreground">Mês normal</div><div className="tabular-nums font-medium">{brl(p.daily.normal)}</div></div>
+                  <div><div className="text-xs text-muted-foreground">Mês pesado</div><div className="tabular-nums font-medium">{brl(p.daily.heavy)}</div></div>
+                </div>
+              )}
+
               <p className="mt-2 text-xs text-muted-foreground">Ainda não separamos automaticamente todos os gastos pontuais.</p>
+
+              {/* Confirmação só quando é permitida (≥1 mês completo e gates ok). 0 meses → não aplicável. */}
               {p.daily.canConfirm ? (
                 <label className="mt-3 flex items-center gap-2 text-sm">
                   <input type="checkbox" checked={state.dailyConfirmed} onChange={(e) => set({ dailyConfirmed: e.target.checked })} />
                   Este valor representa bem meu gasto mensal do dia a dia
                 </label>
-              ) : (
+              ) : p.daily.completeMonths > 0 && p.daily.reason ? (
                 <p className="mt-3 text-xs font-medium text-amber-700 dark:text-amber-300">{p.daily.reason}</p>
-              )}
+              ) : null}
             </section>
           )}
 

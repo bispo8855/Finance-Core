@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 
 import { buildPersonalMonth } from '@/domain/personal/personalMonth';
 import { buildPersonalReading } from '@/domain/personal/personalReading';
+import { hasKnownCommitments } from '@/domain/personal/personalReadingGate';
 import { buildPersonalAlerts } from '@/domain/personal/personalAlerts';
 import { addMonthsISO, monthOf } from '@/domain/personal/cardCycles';
 import { Confidence, PersonalInputs, PersonalMonthResult, ScenarioTriple } from '@/domain/personal/types';
@@ -71,7 +72,10 @@ export default function PersonalOverview({ inputs, monthISO, today }: PersonalOv
     () => buildPersonalMonth(_inputs, _monthISO, _today),
     [_inputs, _monthISO, _today],
   );
-  const leitura = useMemo(() => buildPersonalReading(result), [result]);
+  const leitura = useMemo(
+    () => buildPersonalReading(result, { temCompromissos: hasKnownCommitments(_inputs) }),
+    [result, _inputs],
+  );
   const alertas = useMemo(() => buildPersonalAlerts(result), [result]);
 
   // Próximos 3 meses: consumo do motor (mês, +1, +2) — nada é derivado aqui.

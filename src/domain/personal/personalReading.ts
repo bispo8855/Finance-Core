@@ -38,7 +38,13 @@ function janelaVale(startISO: string, endISO: string): string {
     : `${ddmm(startISO)} e ${ddmm(endISO)}`;
 }
 
-export function buildPersonalReading(result: PersonalMonthResult): string[] {
+export interface ReadingContext {
+  /** Há compromissos conhecidos (fixas/faturas/parcelas)? Guarda a frase de comprometimento. */
+  temCompromissos?: boolean;
+}
+
+export function buildPersonalReading(result: PersonalMonthResult, ctx: ReadingContext = {}): string[] {
+  const temCompromissos = ctx.temCompromissos ?? true; // default seguro (preserva demo com faturas)
   const frases: string[] = [];
 
   // 1) Veredito de calendário — a tese do produto. Só quando existe o vale.
@@ -63,10 +69,14 @@ export function buildPersonalReading(result: PersonalMonthResult): string[] {
   //    Saldo negativo com rotina positiva é o caso T6 (buraco acumulado, não falta de renda).
   const saldo = result.saldoAtual.value;
   if (saldo >= 0) {
-    frases.push(
-      `Seu saldo hoje é ${brl(saldo)}, mas parte disso já está comprometida ` +
-      `com faturas e contas do mês.`,
-    );
+    // Só afirma comprometimento quando há compromissos conhecidos (fixas/faturas/parcelas).
+    // Sem isso, a frase mentiria — então não sai.
+    if (temCompromissos) {
+      frases.push(
+        `Seu saldo hoje é ${brl(saldo)}, mas parte disso já está comprometida ` +
+        `com faturas e contas do mês.`,
+      );
+    }
   } else if (result.sobraEstrutural.values.provavel > 0) {
     frases.push(
       `Seu saldo hoje está negativo em ${brl(Math.abs(saldo))} — isso é buraco acumulado, ` +

@@ -11,9 +11,10 @@
 // Dados mínimos = pelo menos 1 CONTA e 1 RENDA (sem os dois não há trajetória possível).
 // ============================================================================
 
-import { Link } from 'react-router-dom';
 import PersonalOverview from './PersonalOverview';
+import PersonalIncompleteReading from '@/components/personal/PersonalIncompleteReading';
 import { usePersonalData } from '@/hooks/personal/usePersonalData';
+import { readingIsReliable } from '@/domain/personal/personalReadingGate';
 
 // Mês/hoje a partir do relógio real (a rota real não é determinística como a demo).
 function currentMonthISO(d: Date): string {
@@ -43,7 +44,7 @@ export default function PersonalRealOverview() {
   const monthISO = currentMonthISO(now);
   const today = todayISO(now);
 
-  const { inputs, isLoading, error } = usePersonalData(monthISO, today);
+  const { inputs, isLoading, error, declaredNoCards, declaredNoFixedCommitments } = usePersonalData(monthISO, today);
 
   if (isLoading) {
     return (
@@ -66,45 +67,27 @@ export default function PersonalRealOverview() {
     );
   }
 
-  // Critério de dados mínimos: ao menos 1 conta E 1 renda. (dailySpending pode faltar —
-  // o adapter sinaliza a premissa crítica; dado incompleto ≠ dado ausente.)
-  const temMinimos = !!inputs && inputs.accounts.length > 0 && inputs.incomeSources.length > 0;
+  // GATE HONESTO: só produzimos a leitura completa quando podeGerarLeituraConfiavel
+  // aprova (mesma regra do onboarding). Sem isso, mostrar saldo/renda + o que falta —
+  // NUNCA sobra/projeção/prudente com gasto ausente virando zero.
+  const gate = inputs
+    ? readingIsReliable(inputs, { declaredNoCards, declaredNoFixedCommitments })
+    : { ok: false, missing: ['conta', 'renda', 'dia a dia'] };
 
-  if (!temMinimos) {
+  if (!inputs || !gate.ok) {
+    const saldoAtual = inputs && inputs.accounts.length > 0
+      ? inputs.accounts.reduce((s, a) => s + a.currentBalance, 0)
+      : null;
+    const renda = (inputs?.incomeSources ?? [])
+      .filter((i) => i.nature === 'rotina')
+      .map((i) => ({ label: i.label, amount: i.amount }));
     return (
       <Shell>
-        <div className="rounded-xl border bg-card p-6 max-w-2xl">
-          <h1 className="text-xl font-bold tracking-tight">Seu espaço Personal está pronto.</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Agora falta informar seus dados para gerar a leitura do seu mês.
-          </p>
-          <ul className="mt-4 space-y-1.5 text-sm text-muted-foreground">
-            <li className={inputs && inputs.accounts.length > 0 ? 'line-through opacity-60' : ''}>
-              • Ao menos uma conta com saldo atual
-            </li>
-            <li className={inputs && inputs.incomeSources.length > 0 ? 'line-through opacity-60' : ''}>
-              • Ao menos uma fonte de renda
-            </li>
-          </ul>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Link
-              to="/personal/import"
-              className="inline-flex items-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-            >
-              Importar extrato
-            </Link>
-            <span className="text-xs text-muted-foreground">
-              Envie um extrato CSV/XLSX e o Aurys pré-organiza tudo para você revisar.
-            </span>
-          </div>
-          <p className="mt-4 text-xs text-muted-foreground/70">
-            Enquanto isso, você pode conferir a demonstração em <span className="font-medium">/personal/demo</span>.
-          </p>
-        </div>
+        <PersonalIncompleteReading saldoAtual={saldoAtual} renda={renda} missing={gate.missing} />
       </Shell>
     );
   }
 
-  // Com dados mínimos → a tela de verdade (sem selo de demo).
+  // Leitura confiável → a tela de verdade (sem selo de demo).
   return <PersonalOverview inputs={inputs!} monthISO={monthISO} today={today} />;
 }

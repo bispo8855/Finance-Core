@@ -19,6 +19,10 @@ export interface UsePersonalDataResult {
   isLoading: boolean;
   isEmpty: boolean;
   error: Error | null;
+  // Flags de settings (declaração explícita do onboarding) — necessárias para o
+  // gate de leitura confiável na overview. Lidas do persisted, sem tocar o adapter.
+  declaredNoCards: boolean;
+  declaredNoFixedCommitments: boolean;
 }
 
 /** True quando nenhuma das tabelas de entrada tem dados (workspace recém-criado). */
@@ -50,14 +54,19 @@ export function usePersonalData(monthISO: string, today: string): UsePersonalDat
   const workspaceId = wsQuery.data?.workspaceId ?? null;
 
   // 2. Lê os dados e converte para PersonalInputs via adapter (no select — nunca no componente).
+  //    Mantém também as flags de settings do persisted (o adapter segue intocado).
   const dataQuery = useQuery({
     queryKey: ['personal', 'data', workspaceId, monthISO, today],
     queryFn: () => loadPersonalData(workspaceId as string),
     enabled: !!workspaceId,
-    select: (persisted) => buildPersonalInputs(persisted, monthISO, today),
+    select: (persisted) => ({
+      adapter: buildPersonalInputs(persisted, monthISO, today),
+      declaredNoCards: !!persisted.settings?.declared_no_cards,
+      declaredNoFixedCommitments: !!persisted.settings?.declared_no_fixed_commitments,
+    }),
   });
 
-  const adapter = dataQuery.data ?? null;
+  const adapter = dataQuery.data?.adapter ?? null;
   const inputs = adapter?.inputs ?? null;
 
   return {
@@ -67,5 +76,7 @@ export function usePersonalData(monthISO: string, today: string): UsePersonalDat
     isLoading: (!!userId && wsQuery.isLoading) || (!!workspaceId && dataQuery.isLoading),
     isEmpty: !dataQuery.isLoading && computeIsEmpty(inputs),
     error: (wsQuery.error as Error) ?? (dataQuery.error as Error) ?? null,
+    declaredNoCards: dataQuery.data?.declaredNoCards ?? false,
+    declaredNoFixedCommitments: dataQuery.data?.declaredNoFixedCommitments ?? false,
   };
 }

@@ -59,16 +59,53 @@ describe('ReviewPanel', () => {
     expect(screen.getByText(/Isso entra todo mês/)).toBeInTheDocument();
   });
 
-  it('daily sem gate → toggle ausente e motivo visível; com gate → toggle presente', () => {
-    const s = sum({ diaADia: { porMes: [{ monthISO: '2026-06', total: 300, parcial: false }], min: 250, normal: 300, heavy: 350, confidence: 'media', issues: [] } });
-    const bloqueado: DailyCandidate = { hasCandidate: true, min: 250, normal: 300, heavy: 350, completeMonths: 0, outrosHigh: false, canConfirm: false, reason: 'Faltam meses completos para estimar o dia a dia com segurança.' };
+  it('daily bloqueado (≥1 mês, Outros>20%) → toggle ausente e motivo visível; com gate → toggle presente', () => {
+    const s = sum({ diaADia: { porMes: [{ monthISO: '2026-06', total: 300, parcial: false }], min: 250, normal: 300, heavy: 350, confidence: 'media', issues: [] }, gastosVariaveis: { total: 300, byCategory: [] } });
+    const bloqueado: DailyCandidate = { hasCandidate: true, min: 250, normal: 300, heavy: 350, completeMonths: 1, outrosHigh: true, canConfirm: false, reason: '"Outros" passa de 20% dos gastos variáveis — o dia a dia ainda não é confiável.' };
     render(<Harness {...baseProps({ summary: s, daily: bloqueado })} />);
     expect(screen.queryByText(/representa bem meu gasto mensal/)).not.toBeInTheDocument();
-    expect(screen.getByText(/Faltam meses completos/)).toBeInTheDocument();
+    expect(screen.getByText(/"Outros" passa de 20%/)).toBeInTheDocument();
 
-    const liberado: DailyCandidate = { ...bloqueado, completeMonths: 2, canConfirm: true, reason: null };
+    const liberado: DailyCandidate = { ...bloqueado, completeMonths: 2, outrosHigh: false, canConfirm: true, reason: null };
     render(<Harness {...baseProps({ summary: s, daily: liberado })} />);
     expect(screen.getByText(/representa bem meu gasto mensal/)).toBeInTheDocument();
+  });
+
+  it('daily 0 meses completos → "observado" + período, sem leve/normal/pesado', () => {
+    const s = sum({ period: { from: '2026-08-24', to: '2026-08-26', months: ['2026-08'], mesesParciais: ['2026-08'] }, gastosVariaveis: { total: 186.38, byCategory: [{ category: 'Mercado', total: 186.38, count: 3 }] }, diaADia: { porMes: [{ monthISO: '2026-08', total: 186.38, parcial: true }], min: 186.38, normal: 186.38, heavy: 186.38, confidence: 'baixa', issues: [] } });
+    const d: DailyCandidate = { hasCandidate: true, min: 186.38, normal: 186.38, heavy: 186.38, completeMonths: 0, outrosHigh: false, canConfirm: false, reason: 'Faltam meses completos.' };
+    render(<Harness {...baseProps({ summary: s, daily: d })} />);
+    expect(screen.getByText(/Dia a dia observado/)).toBeInTheDocument();
+    expect(screen.getByText(/Período observado: 24\/08\/2026 a 26\/08\/2026/)).toBeInTheDocument();
+    expect(screen.getByText(/Período insuficiente para estimar um mês típico/)).toBeInTheDocument();
+    expect(screen.queryByText('Mês leve')).not.toBeInTheDocument();
+    expect(screen.queryByText(/representa bem meu gasto mensal/)).not.toBeInTheDocument();
+  });
+
+  it('daily 1 mês completo → estimativa única + confiança baixa, sem três faixas', () => {
+    const s = sum({ diaADia: { porMes: [{ monthISO: '2026-06', total: 300, parcial: false }], min: 250, normal: 300, heavy: 350, confidence: 'media', issues: [] }, gastosVariaveis: { total: 300, byCategory: [] } });
+    const d: DailyCandidate = { hasCandidate: true, min: 250, normal: 300, heavy: 350, completeMonths: 1, outrosHigh: false, canConfirm: true, reason: null };
+    render(<Harness {...baseProps({ summary: s, daily: d })} />);
+    expect(screen.getByText(/Estimativa de dia a dia/)).toBeInTheDocument();
+    expect(screen.getByText(/apenas 1 mês completo/)).toBeInTheDocument();
+    expect(screen.queryByText('Mês leve')).not.toBeInTheDocument();
+    expect(screen.getByText(/representa bem meu gasto mensal/)).toBeInTheDocument();
+  });
+
+  it('daily 2+ meses completos → três faixas leve/normal/pesado', () => {
+    const s = sum({ diaADia: { porMes: [{ monthISO: '2026-06', total: 300, parcial: false }, { monthISO: '2026-07', total: 320, parcial: false }], min: 300, normal: 310, heavy: 320, confidence: 'media', issues: [] }, gastosVariaveis: { total: 620, byCategory: [] } });
+    const d: DailyCandidate = { hasCandidate: true, min: 300, normal: 310, heavy: 320, completeMonths: 2, outrosHigh: false, canConfirm: true, reason: null };
+    render(<Harness {...baseProps({ summary: s, daily: d })} />);
+    expect(screen.getByText('Mês leve')).toBeInTheDocument();
+    expect(screen.getByText('Mês normal')).toBeInTheDocument();
+    expect(screen.getByText('Mês pesado')).toBeInTheDocument();
+  });
+
+  it('duvidosos: singular/plural correto', () => {
+    const umaSaida = sum({ gastosVariaveis: { total: 1000, byCategory: [] }, duvidosos: [{ line: { sourceRow: 1, date: '2026-06-10', description: 'x', amount: 50, direction: 'saida' }, reason: 'r' }] });
+    render(<Harness {...baseProps({ summary: umaSaida })} />);
+    expect(screen.getByText(/^1 item ·/)).toBeInTheDocument();
+    expect(screen.getByText(/0 entradas · 1 saída\./)).toBeInTheDocument();
   });
 
   it('preview mostra contagens, aviso de dedupe e onboarding incompleto', () => {

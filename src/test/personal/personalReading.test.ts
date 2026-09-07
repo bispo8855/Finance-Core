@@ -58,6 +58,11 @@ describe('buildPersonalReading — saldo × comprometido (guarda de honestidade)
     expect(frases.some((f) => f.includes('já está comprometida'))).toBe(true);
   });
 
+  it('sem compromissos conhecidos NÃO afirma "comprometida com faturas e contas"', () => {
+    const frases = buildPersonalReading(makeResult({ saldoAtual: { value: 1000, confidence: 'alta' } }), { temCompromissos: false });
+    expect(frases.some((f) => f.includes('já está comprometida'))).toBe(false);
+  });
+
   it('saldo NEGATIVO com rotina positiva fala em buraco acumulado, nunca "parte comprometida"', () => {
     const frases = buildPersonalReading(makeResult({ saldoAtual: { value: -4284, confidence: 'alta' } }));
     expect(frases.some((f) => f.includes('buraco acumulado'))).toBe(true);
