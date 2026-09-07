@@ -68,12 +68,21 @@ describe('canApply (gate do botão)', () => {
   it('escopo negocio → bloqueia', () => {
     expect(canApply(baseState({ scope: 'negocio' }), sum({})).ok).toBe(false);
   });
-  it('saldo marcado sem AccountTarget → bloqueia', () => {
-    expect(canApply(baseState({ useBalance: true, accountChoice: null }), sum({})).ok).toBe(false);
-    expect(canApply(baseState({ useBalance: true, accountChoice: { mode: 'new', label: 'Nu' } }), sum({})).ok).toBe(true);
+  const ACC_MSG = /Escolha a conta para aplicar o saldo/;
+  it('useBalance=false → sem bloqueio de AccountTarget', () => {
+    const g = canApply(baseState({ useBalance: false }), sum({}));
+    expect(g.ok).toBe(true);
+    expect(g.reasons.some((r) => ACC_MSG.test(r))).toBe(false);
   });
-  it('pessoal sem saldo → ok', () => {
-    expect(canApply(baseState({}), sum({})).ok).toBe(true);
+  it('useBalance=true sem target → bloqueia com a mensagem de conta', () => {
+    const g = canApply(baseState({ useBalance: true, accountChoice: null }), sum({}));
+    expect(g.ok).toBe(false);
+    expect(g.reasons.some((r) => ACC_MSG.test(r))).toBe(true);
+  });
+  it('useBalance=true com target válido → bloqueio some', () => {
+    const g = canApply(baseState({ useBalance: true, accountChoice: { mode: 'new', label: 'Nu' } }), sum({}));
+    expect(g.ok).toBe(true);
+    expect(g.reasons.some((r) => ACC_MSG.test(r))).toBe(false);
   });
 });
 

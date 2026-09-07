@@ -281,9 +281,9 @@ export default function ReviewPanel(p: ReviewPanelProps) {
               {p.preview.dedupe > 0 && (
                 <p className="mt-2 text-xs text-muted-foreground">Alguns itens já existem e não serão duplicados ({p.preview.dedupe}).</p>
               )}
-              {!p.preview.onboardingConfiavel && (
+              {!p.preview.onboardingConfiavel && p.preview.onboardingMissing.length > 0 && (
                 <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                  Ainda faltará: {p.preview.onboardingMissing.join(', ') || '—'}. Os dados confirmados serão salvos, mas a leitura completa ainda não será liberada.
+                  Ainda faltará: {p.preview.onboardingMissing.join(', ')}. Os dados confirmados serão salvos, mas a leitura completa ainda não será liberada.
                 </p>
               )}
             </section>

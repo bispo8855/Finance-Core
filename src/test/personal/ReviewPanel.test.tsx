@@ -117,6 +117,29 @@ describe('ReviewPanel', () => {
     expect(screen.getByText(/leitura completa ainda não será liberada/)).toBeInTheDocument();
   });
 
+  it('onboarding incompleto com missing VAZIO → NÃO renderiza "Ainda faltará"', () => {
+    render(<Harness {...baseProps({ preview: { saldo: false, rendas: 1, fixas: 0, daily: false, dedupe: 0, onboardingConfiavel: false, onboardingMissing: [] } })} />);
+    expect(screen.queryByText(/Ainda faltará/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/—/)).not.toBeInTheDocument();
+  });
+
+  it('onboarding incompleto com missing preenchido → renderiza itens reais', () => {
+    render(<Harness {...baseProps({ preview: { saldo: false, rendas: 1, fixas: 0, daily: false, dedupe: 0, onboardingConfiavel: false, onboardingMissing: ['dia a dia', 'cartão/fatura'] } })} />);
+    expect(screen.getByText(/Ainda faltará: dia a dia, cartão\/fatura\./)).toBeInTheDocument();
+  });
+
+  it('useBalance=false → sem bloqueio de AccountTarget; preview "nenhum saldo"', () => {
+    render(<Harness {...baseProps({ summary: sum({ saldo: { valor: 500, fonte: 'movimento' } }), initial: st({ useBalance: false }), gate: { ok: true, reasons: [] }, preview: { saldo: false, rendas: 0, fixas: 0, daily: false, dedupe: 0, onboardingConfiavel: false, onboardingMissing: ['dia a dia'] } })} />);
+    expect(screen.queryByText(/Escolha a conta para aplicar o saldo/)).not.toBeInTheDocument();
+    expect(screen.getByText('nenhum saldo')).toBeInTheDocument();
+  });
+
+  it('useBalance=true + target válido → bloqueio de AccountTarget desaparece', () => {
+    render(<Harness {...baseProps({ summary: sum({ saldo: { valor: 500, fonte: 'movimento' } }), initial: st({ useBalance: true, accountChoice: { mode: 'new', label: 'Nubank' } }), gate: { ok: true, reasons: [] } })} />);
+    expect(screen.queryByText(/Escolha a conta para aplicar o saldo/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Aplicar dados confirmados/ })).not.toBeDisabled();
+  });
+
   it('aplicar chama onApply uma única vez quando habilitado', () => {
     const onApply = vi.fn();
     render(<Harness {...baseProps({ onApply })} />);
