@@ -413,12 +413,16 @@ export async function runApplyPlan(plan: ApplyPlan, deps: ApplyExecutorDeps): Pr
   if (plan.batchStatus === 'discarded') throw new Error('Batch descartado — não aplicar.');
   if (plan.blocked) { res.blocked = true; res.blockedReason = plan.blockedReason; return res; }
 
+  // Atualização real de conta existente (op='update') é EFEITO, mas não é create
+  // nem reconcile — conta à parte para a guarda de "efeito real".
+  let accountUpdates = 0;
+
   // 1) Conta / saldo (também grava applied_account_id).
   for (const a of plan.accountActions) {
     if (a.op === 'skip') { res.skipped++; continue; }
     let accountId: string;
     if (a.op === 'create') { accountId = (await deps.createAccount(a.payload)).id; res.created.accounts++; }
-    else if (a.op === 'update') { accountId = a.targetId!; await deps.updateAccount(accountId, a.payload); }
+    else if (a.op === 'update') { accountId = a.targetId!; await deps.updateAccount(accountId, a.payload); accountUpdates++; }
     else { accountId = a.targetId!; res.reconciled++; }
     if (a.sourceItemIds.length) await deps.linkItems(a.sourceItemIds, TABLE.account, accountId);
     await deps.setBatchAppliedAccount(plan.batchId, accountId);
@@ -451,7 +455,20 @@ export async function runApplyPlan(plan: ApplyPlan, deps: ApplyExecutorDeps): Pr
     if (a.sourceItemIds.length) await deps.linkItems(a.sourceItemIds, TABLE.daily, String(a.payload!.monthISO));
   }
 
-  // 5) Settings / onboarding.
+  // GUARDA DE EFEITO REAL: um batch só vira 'applied' se houve efeito persistente
+  // (target criado, reconciliado/vinculado, ou saldo de conta atualizado). skip
+  // não conta. Sem efeito → não marca applied, não grava applied_at, não flipa
+  // onboarding; permanece no estado anterior (review) com "Nada a aplicar".
+  const hasEffect =
+    res.created.accounts + res.created.incomes + res.created.fixed + res.created.daily
+    + res.reconciled + accountUpdates > 0;
+  if (!hasEffect) {
+    res.applied = false;
+    res.blockedReason = 'Nada a aplicar — selecione ao menos um dado para aplicar.';
+    return res;
+  }
+
+  // 5) Settings / onboarding (só quando houve efeito real).
   if (plan.settingsAction && plan.settingsAction.op !== 'skip') {
     await deps.upsertSettings(plan.settingsAction.payload);
   }

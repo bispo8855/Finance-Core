@@ -496,6 +496,48 @@ describe('runApplyPlan (executor)', () => {
     expect(calls.markBatchApplied).toBe(0);
     expect(calls.createIncome.length).toBe(0);
   });
+
+  // ---- GUARDA DE EFEITO REAL (AP4C.1c-2.4) ----
+  it('A) plano 100% skip → NÃO marca applied; applied=false; sem applied_at', async () => {
+    const plan = planWith({
+      incomeActions: [{ kind: 'income', op: 'skip', sourceItemIds: ['a'], groupKey: 'renda:x', reason: '', confidence: 'baixa', payload: null }],
+      fixedActions: [{ kind: 'fixed', op: 'skip', sourceItemIds: ['b'], groupKey: 'fixa:y', reason: '', confidence: 'baixa', payload: null }],
+    });
+    const { deps, calls } = fakeDeps();
+    const res = await runApplyPlan(plan, deps);
+    expect(res.applied).toBe(false);
+    expect(calls.markBatchApplied).toBe(0);
+    expect(res.blockedReason).toMatch(/nada a aplicar/i);
+  });
+
+  it('B) cria 1 fixa → marca batch applied', async () => {
+    const plan = planWith({ fixedActions: [{ kind: 'fixed', op: 'create', sourceItemIds: ['b'], groupKey: 'fixa:y', reason: '', confidence: 'media', payload: { label: 'Y', amount: 1, dayOfMonth: 1, payMethod: 'debito', essential: false, confidence: 'media' } }] });
+    const { deps, calls } = fakeDeps();
+    const res = await runApplyPlan(plan, deps);
+    expect(res.applied).toBe(true);
+    expect(calls.createFixed.length).toBe(1);
+    expect(calls.markBatchApplied).toBe(1);
+  });
+
+  it('C) reconcilia 1 target existente → conta como efeito e marca applied', async () => {
+    const plan = planWith({ incomeActions: [{ kind: 'income', op: 'reconcile', sourceItemIds: ['a'], groupKey: 'renda:x', reason: '', confidence: 'media', payload: null, targetId: 'inc-9' }] });
+    const { deps, calls } = fakeDeps();
+    const res = await runApplyPlan(plan, deps);
+    expect(res.applied).toBe(true);
+    expect(res.reconciled).toBe(1);
+    expect(calls.createIncome.length).toBe(0);
+    expect(calls.markBatchApplied).toBe(1);
+  });
+
+  it('D) atualização de saldo de conta existente (sem create) conta como efeito', async () => {
+    const plan = planWith({ accountActions: [{ kind: 'account', op: 'update', sourceItemIds: [], groupKey: null, targetId: 'acc-1', reason: '', confidence: 'alta', payload: { currentBalance: 100, balanceDate: '2026-07-31', confidence: 'alta' } }] });
+    const { deps, calls } = fakeDeps();
+    const res = await runApplyPlan(plan, deps);
+    expect(res.applied).toBe(true);
+    expect(calls.updateAccount.length).toBe(1);
+    expect(calls.setBatchAppliedAccount[0]).toMatchObject({ bid: 'b1', aid: 'acc-1' });
+    expect(calls.markBatchApplied).toBe(1);
+  });
 });
 
 // ===========================================================================

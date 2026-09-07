@@ -140,18 +140,24 @@ export interface PlanPreview {
   fixas: number;
   daily: boolean;
   dedupe: number;         // itens que já existem e não serão duplicados
+  applicable: boolean;    // há ao menos uma ação com efeito (não-skip)?
   onboardingConfiavel: boolean;
   onboardingMissing: string[];
 }
 export function planPreview(plan: ApplyPlan): PlanPreview {
   const creates = (arr: ApplyPlan['incomeActions']) => arr.filter((a) => a.op === 'create').length;
   const reconciles = (arr: ApplyPlan['incomeActions']) => arr.filter((a) => a.op === 'reconcile').length;
+  // Aplicável = qualquer ação de conta/renda/fixa/daily que NÃO seja skip
+  // (create, update ou reconcile produzem efeito persistente). Settings não conta.
+  const applicable = [plan.accountActions, plan.incomeActions, plan.fixedActions, plan.dailyActions]
+    .some((arr) => arr.some((a) => a.op !== 'skip'));
   return {
     saldo: plan.accountActions.some((a) => a.op === 'create' || a.op === 'update'),
     rendas: creates(plan.incomeActions),
     fixas: creates(plan.fixedActions),
     daily: plan.dailyActions.some((a) => a.op === 'create'),
     dedupe: reconciles(plan.incomeActions) + reconciles(plan.fixedActions),
+    applicable,
     onboardingConfiavel: plan.onboarding.willBeConfiavel,
     onboardingMissing: plan.onboarding.missing,
   };

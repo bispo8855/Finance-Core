@@ -109,7 +109,7 @@ describe('ReviewPanel', () => {
   });
 
   it('preview mostra contagens, aviso de dedupe e onboarding incompleto', () => {
-    render(<Harness {...baseProps({ preview: { saldo: true, rendas: 2, fixas: 4, daily: false, dedupe: 1, onboardingConfiavel: false, onboardingMissing: ['cartão/fatura'] } })} />);
+    render(<Harness {...baseProps({ preview: { saldo: true, rendas: 2, fixas: 4, daily: false, dedupe: 1, applicable: true, onboardingConfiavel: false, onboardingMissing: ['cartão/fatura'] } })} />);
     expect(screen.getByText('O Aurys vai aplicar:')).toBeInTheDocument();
     expect(screen.getByText(/2 renda/)).toBeInTheDocument();
     expect(screen.getByText(/4 conta\(s\) fixa/)).toBeInTheDocument();
@@ -138,6 +138,22 @@ describe('ReviewPanel', () => {
     render(<Harness {...baseProps({ summary: sum({ saldo: { valor: 500, fonte: 'movimento' } }), initial: st({ useBalance: true, accountChoice: { mode: 'new', label: 'Nubank' } }), gate: { ok: true, reasons: [] } })} />);
     expect(screen.queryByText(/Escolha a conta para aplicar o saldo/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aplicar dados confirmados/ })).not.toBeDisabled();
+  });
+
+  it('E) zero ações aplicáveis (preview.applicable=false) → botão desabilitado + orientação', () => {
+    const onApply = vi.fn();
+    render(<Harness {...baseProps({ onApply, preview: { saldo: false, rendas: 0, fixas: 0, daily: false, dedupe: 0, applicable: false, onboardingConfiavel: false, onboardingMissing: ['dia a dia'] } })} />);
+    const btn = screen.getByRole('button', { name: /Aplicar dados confirmados/ });
+    expect(btn).toBeDisabled();
+    expect(screen.getByText('Selecione pelo menos um dado para aplicar.')).toBeInTheDocument();
+    fireEvent.click(btn);
+    expect(onApply).not.toHaveBeenCalled();
+  });
+
+  it('F) preview.applicable=true → botão habilitado', () => {
+    render(<Harness {...baseProps({ preview: { saldo: false, rendas: 0, fixas: 1, daily: false, dedupe: 0, applicable: true, onboardingConfiavel: false, onboardingMissing: ['dia a dia'] } })} />);
+    expect(screen.getByRole('button', { name: /Aplicar dados confirmados/ })).not.toBeDisabled();
+    expect(screen.queryByText('Selecione pelo menos um dado para aplicar.')).not.toBeInTheDocument();
   });
 
   it('aplicar chama onApply uma única vez quando habilitado', () => {

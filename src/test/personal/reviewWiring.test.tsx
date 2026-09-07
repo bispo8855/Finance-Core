@@ -104,6 +104,19 @@ describe('integração: escolhas da revisão refletem no preview', () => {
     expect(screen.getByText(/^1 conta\(s\) fixa\(s\)$/)).toBeInTheDocument();
   });
 
+  it('G) botão "Aplicar" habilita só com ação aplicável (marca → habilita → desmarca → desabilita)', () => {
+    render(<Wired summary={summary()} items={items()} batch={batch()} db={db()} />);
+    const btn = () => screen.getByRole('button', { name: /Aplicar dados confirmados/ });
+    // Inicial: nada aplicável (fixas media desmarcadas, saldo não usado) → desabilitado.
+    expect(btn()).toBeDisabled();
+    // Marca uma fixa válida → habilita.
+    fireEvent.click(screen.getByLabelText('Aluguel'));
+    expect(btn()).not.toBeDisabled();
+    // Desmarca tudo → volta a desabilitar.
+    fireEvent.click(screen.getByLabelText('Aluguel'));
+    expect(btn()).toBeDisabled();
+  });
+
   it('detected_balance NULO no batch → coalesce do summary faz o saldo aplicar', () => {
     const bAntigo: ImportBatchRow = { ...batch(), detected_balance: null, balance_source: null };
     render(<Wired summary={summary()} items={items()} batch={bAntigo} db={db()} />);

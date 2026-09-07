@@ -298,11 +298,15 @@ export default function ReviewPanel(p: ReviewPanelProps) {
       {!p.gate.ok && p.gate.reasons.length > 0 && (
         <ul className="text-xs text-amber-700 dark:text-amber-300">{p.gate.reasons.map((r) => <li key={r}>• {r}</li>)}</ul>
       )}
+      {/* Nada aplicável selecionado → orienta o usuário (proteção adicional à guarda do executor). */}
+      {p.gate.ok && p.preview && !p.preview.applicable && (
+        <p className="text-xs text-amber-700 dark:text-amber-300">Selecione pelo menos um dado para aplicar.</p>
+      )}
       <div>
         <button
           type="button"
           onClick={p.onApply}
-          disabled={!p.gate.ok || p.applying}
+          disabled={!p.gate.ok || p.applying || (!!p.preview && !p.preview.applicable)}
           className="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {p.applying ? 'Aplicando…' : 'Aplicar dados confirmados'}
