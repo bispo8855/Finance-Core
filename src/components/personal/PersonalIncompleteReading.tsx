@@ -9,6 +9,23 @@ import { Link } from 'react-router-dom';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
+// Fragmentos da frase por item do gate (usa o MESMO missing já calculado; sem novo gate).
+const MISSING_FRAGMENT: Record<string, string> = {
+  'dia a dia': 'seus gastos do dia a dia',
+  'contas fixas': 'suas contas fixas',
+  'cartão/fatura': 'cartão',
+  conta: 'sua conta e saldo',
+  renda: 'sua renda',
+};
+
+/** Junta os fragmentos: [a] → "a"; [a,b] → "a e b"; [a,b,c] → "a, b e c". */
+export function describeMissingForReading(missing: string[]): string {
+  const parts = missing.map((m) => MISSING_FRAGMENT[m] ?? m);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
+  return `${parts.slice(0, -1).join(', ')} e ${parts[parts.length - 1]}`;
+}
+
 export interface PersonalIncompleteReadingProps {
   saldoAtual: number | null;   // null = ainda não conhecemos conta/saldo
   renda: { label: string; amount: number }[];
@@ -21,8 +38,10 @@ export default function PersonalIncompleteReading({ saldoAtual, renda, missing }
       <div className="rounded-2xl border bg-card p-6">
         <h1 className="text-xl font-bold tracking-tight">Sua leitura ainda está incompleta.</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Já conheço seu saldo e parte da sua renda. Ainda preciso entender seus gastos do dia a dia,
-          contas fixas e cartão para calcular quanto realmente sobra.
+          Já conheço seu saldo e parte da sua renda.
+          {describeMissingForReading(missing)
+            ? ` Ainda preciso entender ${describeMissingForReading(missing)} para calcular quanto realmente sobra.`
+            : ' Ainda faltam alguns dados para calcular quanto realmente sobra.'}
         </p>
       </div>
 
