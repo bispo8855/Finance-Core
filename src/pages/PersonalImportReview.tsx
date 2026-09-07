@@ -77,7 +77,15 @@ export default function PersonalImportReview() {
   const plan = useMemo(() => {
     if (!summary || !effectiveState || !batchQuery.data?.batch || !dataQuery.data) return null;
     const b = batchQuery.data.batch as unknown as ImportBatchRow;
-    const batchRow: ImportBatchRow = { ...b, account_scope: effectiveState.scope ?? b.account_scope, summary_json: summary };
+    // Coalesce: o saldo mostrado vem do summary_json; se a coluna detected_balance
+    // estiver ausente (batch antigo), usa o saldo do summary para o plano bater com a UI.
+    const batchRow: ImportBatchRow = {
+      ...b,
+      account_scope: effectiveState.scope ?? b.account_scope,
+      detected_balance: b.detected_balance ?? summary.saldo.valor,
+      balance_source: b.balance_source ?? summary.saldo.fonte,
+      summary_json: summary,
+    };
     return buildApplyPlan({ batch: batchRow, items, decisions: buildDecisions(effectiveState), existingPersonalData: dataQuery.data });
   }, [summary, effectiveState, batchQuery.data, dataQuery.data, items]);
 
@@ -111,7 +119,13 @@ export default function PersonalImportReview() {
       if (!b || !b.summary_json) throw new Error('Lote de importação indisponível.');
       const freshData = await loadPersonalData(b.workspace_id);
       const freshItems = fresh.items as unknown as ImportItemRow[];
-      const batchRow: ImportBatchRow = { ...b, account_scope: st.scope ?? b.account_scope };
+      const freshSummary = b.summary_json as ImportSummary | null;
+      const batchRow: ImportBatchRow = {
+        ...b,
+        account_scope: st.scope ?? b.account_scope,
+        detected_balance: b.detected_balance ?? freshSummary?.saldo?.valor ?? null,
+        balance_source: b.balance_source ?? freshSummary?.saldo?.fonte ?? null,
+      };
       const freshPlan = buildApplyPlan({ batch: batchRow, items: freshItems, decisions: buildDecisions(st), existingPersonalData: freshData });
       if (freshPlan.blocked) throw new Error(freshPlan.blockedReason ?? 'Não é possível aplicar este lote.');
 
