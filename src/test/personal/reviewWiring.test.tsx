@@ -117,6 +117,29 @@ describe('integração: escolhas da revisão refletem no preview', () => {
     expect(btn()).toBeDisabled();
   });
 
+  it('G) selecionar o perfil na tela faz o plano/preview receber a escolha (daily)', () => {
+    const sDaily: ImportSummary = {
+      ...summary(),
+      fixasProvaveis: [],
+      diaADia: { porMes: [{ monthISO: '2026-06', total: 300, parcial: false }, { monthISO: '2026-07', total: 320, parcial: false }], min: 300, normal: 310, heavy: 320, confidence: 'media', issues: [] },
+      gastosVariaveis: { total: 620, byCategory: [{ category: 'Mercado', total: 620, count: 6 }] },
+    } as ImportSummary;
+    render(<Wired summary={sDaily} items={items()} batch={batch()} db={db()} />);
+    const btn = () => screen.getByRole('button', { name: /Aplicar dados confirmados/ });
+
+    // Confirma o dia a dia SEM perfil → bloqueia com o motivo; preview daily não.
+    fireEvent.click(screen.getByLabelText('Este valor representa bem meu gasto mensal do dia a dia'));
+    expect(screen.getByText(/Informe como você paga a maior parte do dia a dia/)).toBeInTheDocument();
+    expect(btn()).toBeDisabled();
+    expect(screen.getByText('dia a dia: não')).toBeInTheDocument();
+
+    // Seleciona o perfil real → escolha flui ao plano → daily aplicável.
+    fireEvent.click(screen.getByLabelText('Maioria Pix/débito'));
+    expect(screen.queryByText(/Informe como você paga a maior parte do dia a dia/)).not.toBeInTheDocument();
+    expect(screen.getByText('dia a dia: sim')).toBeInTheDocument();
+    expect(btn()).not.toBeDisabled();
+  });
+
   it('detected_balance NULO no batch → coalesce do summary faz o saldo aplicar', () => {
     const bAntigo: ImportBatchRow = { ...batch(), detected_balance: null, balance_source: null };
     render(<Wired summary={summary()} items={items()} batch={bAntigo} db={db()} />);

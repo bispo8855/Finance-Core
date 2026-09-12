@@ -304,7 +304,7 @@ describe('dia a dia', () => {
     const semConf = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions(), existingPersonalData: db() });
     expect(semConf.dailyActions[0].op).toBe('skip');
 
-    const comConf = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true } }), existingPersonalData: db() });
+    const comConf = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }), existingPersonalData: db() });
     expect(comConf.dailyActions[0].op).toBe('create');
     expect(comConf.dailyActions[0].confidence).toBe('baixa');
   });
@@ -319,7 +319,7 @@ describe('dia a dia', () => {
 
   it('≥2 meses completos COM confirmação explícita → cria; parcial não entra', () => {
     const s = sumJson({ porMes: [{ monthISO: '2026-06', total: 300, parcial: false }, { monthISO: '2026-07', total: 320, parcial: false }, { monthISO: '2026-08', total: 100, parcial: true }], min: 300, normal: 310, heavy: 320, confidence: 'media', total: 620, byCategory: [{ category: 'Mercado', total: 620, count: 6 }] });
-    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true } }), existingPersonalData: db() });
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }), existingPersonalData: db() });
     const creates = plan.dailyActions.filter((a) => a.op === 'create');
     expect(creates.length).toBe(2);
     expect(creates.map((a) => a.payload!.monthISO).sort()).toEqual(['2026-06', '2026-07']);
@@ -339,7 +339,7 @@ describe('dia a dia', () => {
       min: 300, normal: 300, heavy: 300, confidence: 'media', total: 100, byCategory: [{ category: 'Mercado', total: 100, count: 5 }],
       duvidosos: [{ line: { sourceRow: 1, date: '2026-06-15', description: 'PIX ?', amount: 20, direction: 'saida' }, reason: 'x' }],
     });
-    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true } }), existingPersonalData: db() });
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }), existingPersonalData: db() });
     const creates = plan.dailyActions.filter((a) => a.op === 'create');
     expect(creates.length).toBeGreaterThan(0);
     expect(creates.every((a) => a.confidence === 'baixa')).toBe(true);
@@ -353,7 +353,7 @@ describe('dia a dia', () => {
 
   it('3 meses completos + confirmação explícita → cria', () => {
     const s = sumJson({ porMes: [{ monthISO: '2026-05', total: 300, parcial: false }, { monthISO: '2026-06', total: 300, parcial: false }, { monthISO: '2026-07', total: 300, parcial: false }], min: 300, normal: 300, heavy: 300, confidence: 'media', total: 900, byCategory: [{ category: 'Mercado', total: 900, count: 9 }] });
-    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true } }), existingPersonalData: db() });
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }), existingPersonalData: db() });
     expect(plan.dailyActions.filter((a) => a.op === 'create').length).toBe(3);
   });
 
@@ -363,6 +363,45 @@ describe('dia a dia', () => {
       existingPersonalData: db({ dailySpending: [{ id: 'd1', month_iso: '2026-06', min_amount: 1, normal_amount: 2, heavy_amount: 3, profile: 'desconhecido', confidence: 'baixa' }] }) });
     const jun = plan.dailyActions.find((a) => a.payload?.monthISO === '2026-06' || a.reason.includes('2026-06'));
     expect(jun!.op).toBe('skip');
+  });
+
+  // ---- PERFIL DE PAGAMENTO no daily (AP4C.1c-2.5) ----
+  const s2 = () => sumJson({ porMes: [{ monthISO: '2026-06', total: 300, parcial: false }, { monthISO: '2026-07', total: 300, parcial: false }], min: 300, normal: 310, heavy: 320, confidence: 'media', total: 620, byCategory: [{ category: 'Mercado', total: 620, count: 6 }] });
+
+  it('B) daily confirmado + maioria_pix → payload.profile === maioria_pix (nunca desconhecido)', () => {
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s2() }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }), existingPersonalData: db() });
+    const creates = plan.dailyActions.filter((a) => a.op === 'create');
+    expect(creates.length).toBeGreaterThan(0);
+    expect(creates.every((a) => a.payload!.profile === 'maioria_pix')).toBe(true);
+    expect(creates.some((a) => a.payload!.profile === 'desconhecido')).toBe(false);
+  });
+
+  it('C) daily confirmado + meio_a_meio → payload.profile === meio_a_meio', () => {
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s2() }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'meio_a_meio' }), existingPersonalData: db() });
+    expect(plan.dailyActions.filter((a) => a.op === 'create').every((a) => a.payload!.profile === 'meio_a_meio')).toBe(true);
+  });
+
+  it('D) daily confirmado + maioria_cartao → payload.profile === maioria_cartao', () => {
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s2() }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true }, profile: 'maioria_cartao' }), existingPersonalData: db() });
+    expect(plan.dailyActions.filter((a) => a.op === 'create').every((a) => a.payload!.profile === 'maioria_cartao')).toBe(true);
+  });
+
+  it('E) daily confirmado + profile AUSENTE → nenhum create; skip com reason explícito', () => {
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s2() }), items: [], decisions: decisions({ daily: { userConfirmedDailySpending: true } }), existingPersonalData: db() });
+    expect(plan.dailyActions.filter((a) => a.op === 'create')).toEqual([]);
+    expect(plan.dailyActions.every((a) => a.op === 'skip')).toBe(true);
+    expect(plan.dailyActions.some((a) => a.reason === 'Informe como você paga a maior parte do dia a dia.')).toBe(true);
+    expect(plan.blocked).toBe(false); // bloqueia SÓ o daily, não o plano
+  });
+
+  it('F) só fixa confirmada + profile ausente → fixa aplicável e plano NÃO bloqueado', () => {
+    const items = [
+      item({ id: 'f1', inferred_kind: 'fixa', group_key: 'fixa:aluguel', inferred_category: 'Moradia', raw_amount: 1000, raw_date: '2026-06-01', raw_description: 'Aluguel' }),
+      item({ id: 'f2', inferred_kind: 'fixa', group_key: 'fixa:aluguel', inferred_category: 'Moradia', raw_amount: 1000, raw_date: '2026-07-01', raw_description: 'Aluguel' }),
+    ];
+    const plan = buildApplyPlan({ batch: batch({ summary_json: s2() }), items, decisions: decisions({ fixed: { 'fixa:aluguel': { confirmed: true } } }), existingPersonalData: db() });
+    expect(plan.blocked).toBe(false);
+    expect(plan.fixedActions[0].op).toBe('create');
   });
 });
 
@@ -381,7 +420,7 @@ describe('onboarding usa podeGerarLeituraConfiavel', () => {
     const plan = buildApplyPlan({
       batch: batch({ detected_balance: 1000, balance_source: 'movimento', summary_json: s2meses() }),
       items: items(),
-      decisions: decisions({ useBalance: true, accountTarget: { kind: 'new', label: 'Conta' }, income: { 'renda:x': { confirmedIncome: true } }, daily: { userConfirmedDailySpending: true } }),
+      decisions: decisions({ useBalance: true, accountTarget: { kind: 'new', label: 'Conta' }, income: { 'renda:x': { confirmedIncome: true } }, daily: { userConfirmedDailySpending: true }, profile: 'maioria_pix' }),
       existingPersonalData: db({ settings: settingsBase }),
     });
     expect(plan.onboarding.willBeConfiavel).toBe(true);

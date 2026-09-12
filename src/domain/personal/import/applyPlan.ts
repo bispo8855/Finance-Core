@@ -6,7 +6,7 @@
 // congelado; nunca rederiva merchantKey no apply-time. Sem UI, sem migration.
 // ============================================================================
 
-import { Confidence } from '../types';
+import { Confidence, SpendProfile } from '../types';
 import { normalizeDescription, PersonalCategory } from './personalCategories';
 import { ImportSummary, ImportItemKind } from './personalImportInference';
 import {
@@ -89,6 +89,9 @@ export interface ApplyDecisions {
   accountTarget?: AccountTarget | null;
   income?: Record<string, { confirmedIncome?: boolean; confirmedRecurring?: boolean }>;
   fixed?: Record<string, { confirmed?: boolean }>;
+  // Perfil de pagamento do dia a dia escolhido pelo usuário (SpendProfile real).
+  // Obrigatório para aplicar daily — sem ele o daily não é criado (sem fallback).
+  profile?: SpendProfile;
   // Confirmação explícita para persistir dia a dia. Exigida SEMPRE enquanto não
   // houver separação automática de atípicos/one-offs (AP4C.1b mostra o placeholder).
   // Vale inclusive para ≥2 meses completos.
@@ -309,6 +312,14 @@ export function buildApplyPlan(args: BuildApplyPlanArgs): ApplyPlan {
           reason: 'dia a dia requer confirmação explícita — atípicos/one-offs ainda não são separados automaticamente.', confidence: 'baixa', payload: null });
         continue;
       }
+      // Perfil de pagamento é OBRIGATÓRIO para o daily (define paymentSplit no motor).
+      // Sem ele NÃO criamos daily — nada de fallback silencioso 'desconhecido'.
+      // Bloqueia SÓ o daily; fixa/saldo seguem normalmente.
+      if (!decisions.profile) {
+        dailyActions.push({ kind: 'daily', op: 'skip', sourceItemIds: monthItemIds, groupKey: null,
+          reason: 'Informe como você paga a maior parte do dia a dia.', confidence: 'baixa', payload: null });
+        continue;
+      }
       // confiança: 1 mês completo → baixa; ≥2 → confiança do resíduo; duvidosa material rebaixa.
       let confidence: Confidence = completos.length === 1 ? 'baixa' : summary.diaADia.confidence;
       if (duvidosaMaterial) confidence = 'baixa';
@@ -316,7 +327,7 @@ export function buildApplyPlan(args: BuildApplyPlanArgs): ApplyPlan {
         kind: 'daily', op: 'create', sourceItemIds: monthItemIds, groupKey: null,
         reason: duvidosaMaterial ? 'dia a dia confirmado; confiança rebaixada por saída duvidosa material.' : 'dia a dia confirmado (meses completos).',
         confidence,
-        payload: { monthISO, minAmount: summary.diaADia.min, normalAmount: summary.diaADia.normal, heavyAmount: summary.diaADia.heavy, profile: 'desconhecido', confidence },
+        payload: { monthISO, minAmount: summary.diaADia.min, normalAmount: summary.diaADia.normal, heavyAmount: summary.diaADia.heavy, profile: decisions.profile, confidence },
       });
     }
   }

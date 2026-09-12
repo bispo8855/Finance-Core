@@ -128,6 +128,28 @@ describe('buildDecisions — "é renda" ≠ "é recorrente"', () => {
   it('sem useBalance → sem accountTarget', () => {
     expect(buildDecisions(baseState({ useBalance: false })).accountTarget).toBeUndefined();
   });
+
+  it('A) preserva state.profile em decisions.profile', () => {
+    expect(buildDecisions(baseState({ profile: 'maioria_pix' })).profile).toBe('maioria_pix');
+    expect(buildDecisions(baseState({})).profile).toBeUndefined();
+  });
+});
+
+describe('canApply — perfil obrigatório quando daily confirmado', () => {
+  const PROF_MSG = /Informe como você paga a maior parte do dia a dia/;
+  it('daily confirmado sem profile → bloqueia com o motivo', () => {
+    const g = canApply(baseState({ dailyConfirmed: true }), sum({}));
+    expect(g.ok).toBe(false);
+    expect(g.reasons.some((r) => PROF_MSG.test(r))).toBe(true);
+  });
+  it('daily confirmado com profile → sem esse motivo', () => {
+    const g = canApply(baseState({ dailyConfirmed: true, profile: 'meio_a_meio' }), sum({}));
+    expect(g.reasons.some((r) => PROF_MSG.test(r))).toBe(false);
+  });
+  it('daily NÃO confirmado sem profile → não exige perfil', () => {
+    const g = canApply(baseState({ dailyConfirmed: false }), sum({}));
+    expect(g.reasons.some((r) => PROF_MSG.test(r))).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

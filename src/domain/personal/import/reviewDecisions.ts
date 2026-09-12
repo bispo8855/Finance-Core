@@ -82,6 +82,8 @@ export function canApply(state: ReviewState, summary: ImportSummary): ApplyGate 
   if (needsScope(summary) && !state.scope) reasons.push('Escolha o escopo da conta (Pessoal / Misto / Da empresa).');
   if (state.scope === 'negocio') reasons.push('Conta de negócio — nada a aplicar no Personal.');
   if (state.useBalance && !validAccountChoice(state.accountChoice)) reasons.push('Escolha a conta para aplicar o saldo (existente ou nova).');
+  // Dia a dia confirmado exige o perfil de pagamento (define o split no motor).
+  if (state.dailyConfirmed && !state.profile) reasons.push('Informe como você paga a maior parte do dia a dia.');
   return { ok: reasons.length === 0, reasons };
 }
 
@@ -124,6 +126,8 @@ export function buildDecisions(state: ReviewState): ApplyDecisions {
     daily: { userConfirmedDailySpending: state.dailyConfirmed },
     today: state.today,
   };
+  // Perfil de pagamento escolhido pelo usuário → decisions (antes era descartado).
+  if (state.profile) decisions.profile = state.profile;
   if (state.useBalance && validAccountChoice(state.accountChoice)) {
     decisions.useBalance = true;
     decisions.accountTarget = state.accountChoice!.mode === 'existing'
