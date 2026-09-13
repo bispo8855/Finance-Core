@@ -9,6 +9,7 @@ import { useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { loadImportBatch, applyBatch, setImportBatchScope, persistItemDecisions } from '@/services/personal/personalImportService';
+import { selectBiggestOutros, adjustSummaryForReview, outrosDecisionWrites, OutrosDecisions } from '@/domain/personal/import/outrosReview';
 import { loadPersonalData } from '@/services/personal/personalService';
 import { buildApplyPlan, ImportBatchRow, ImportItemRow } from '@/domain/personal/import/applyPlan';
 import { batchNeedsReimport } from '@/domain/personal/import/applyContract';
@@ -57,11 +58,19 @@ export default function PersonalImportReview() {
     enabled: !!workspaceId,
   });
 
-  const summary = (batchQuery.data?.batch?.summary_json ?? null) as ImportSummary | null;
+  const rawSummary = (batchQuery.data?.batch?.summary_json ?? null) as ImportSummary | null;
   const items = (batchQuery.data?.items ?? []) as ImportItemRow[];
   const today = todayISO();
 
   const [state, setState] = useState<ReviewState | null>(null);
+  const [outrosDecisions, setOutrosDecisions] = useState<OutrosDecisions>({});
+
+  // Summary recalculado em memória com as decisões da revisão dirigida (Outros).
+  const summary = useMemo(
+    () => (rawSummary ? adjustSummaryForReview(rawSummary, items, outrosDecisions) : null),
+    [rawSummary, items, outrosDecisions],
+  );
+  const outrosItems = useMemo(() => selectBiggestOutros(items), [items]);
   const effectiveState: ReviewState | null = state ?? (summary ? initialReviewState(summary, today) : null);
 
   const [applying, setApplying] = useState(false);
@@ -119,17 +128,21 @@ export default function PersonalImportReview() {
       if (!b || !b.summary_json) throw new Error('Lote de importação indisponível.');
       const freshData = await loadPersonalData(b.workspace_id);
       const freshItems = fresh.items as unknown as ImportItemRow[];
-      const freshSummary = b.summary_json as ImportSummary | null;
+      // Reaplica as decisões da revisão dirigida sobre o summary fresco (Outros).
+      const freshSummary = adjustSummaryForReview(b.summary_json as ImportSummary, freshItems, outrosDecisions);
       const batchRow: ImportBatchRow = {
         ...b,
         account_scope: st.scope ?? b.account_scope,
-        detected_balance: b.detected_balance ?? freshSummary?.saldo?.valor ?? null,
-        balance_source: b.balance_source ?? freshSummary?.saldo?.fonte ?? null,
+        detected_balance: b.detected_balance ?? freshSummary.saldo?.valor ?? null,
+        balance_source: b.balance_source ?? freshSummary.saldo?.fonte ?? null,
+        summary_json: freshSummary,
       };
       const freshPlan = buildApplyPlan({ batch: batchRow, items: freshItems, decisions: buildDecisions(st), existingPersonalData: freshData });
       if (freshPlan.blocked) throw new Error(freshPlan.blockedReason ?? 'Não é possível aplicar este lote.');
 
+      // Auditoria: decisões dos itens do plano + decisões da revisão dirigida (Outros).
       await persistItemDecisions(itemDecisionsFromPlan(freshPlan));
+      await persistItemDecisions(outrosDecisionWrites(outrosDecisions));
       await applyBatch(freshPlan);
       await qc.invalidateQueries({ queryKey: ['personal', 'data'] });
       await qc.invalidateQueries({ queryKey: ['personal', 'importBatch', batchId] });
@@ -160,6 +173,9 @@ export default function PersonalImportReview() {
         reimportRequired={reimportRequired}
         onReimport={() => navigate('/personal/import')}
         onApply={onApply}
+        outrosItems={outrosItems}
+        outrosDecisions={outrosDecisions}
+        onOutrosChange={setOutrosDecisions}
       />
     </Shell>
   );

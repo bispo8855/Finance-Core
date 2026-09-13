@@ -10,6 +10,8 @@ import {
   incomeGroupKey, fixedGroupKey, isSingleOccurrence,
 } from '@/domain/personal/import/reviewDecisions';
 import { PlanPreview } from '@/domain/personal/import/reviewDecisions';
+import { OutrosItem, OutrosDecisions } from '@/domain/personal/import/outrosReview';
+import OutrosReview from '@/components/personal/import/OutrosReview';
 
 const brl = (n: number) => n.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const plural = (n: number, sing: string, plur: string) => `${n} ${n === 1 ? sing : plur}`;
@@ -32,6 +34,10 @@ export interface ReviewPanelProps {
   reimportRequired: boolean;
   onReimport: () => void;
   onApply: () => void;
+  // Revisão dirigida dos maiores "Outros" (AP4C.1d). Opcional.
+  outrosItems?: OutrosItem[];
+  outrosDecisions?: OutrosDecisions;
+  onOutrosChange?: (next: OutrosDecisions) => void;
 }
 
 export default function ReviewPanel(p: ReviewPanelProps) {
@@ -252,6 +258,16 @@ export default function ReviewPanel(p: ReviewPanelProps) {
               ) : p.daily.completeMonths > 0 && p.daily.reason ? (
                 <p className="mt-3 text-xs font-medium text-amber-700 dark:text-amber-300">{p.daily.reason}</p>
               ) : null}
+
+              {/* Revisão dirigida quando o daily está bloqueado por "Outros > 20%". */}
+              {p.daily.outrosHigh && p.outrosItems && p.onOutrosChange && (
+                <OutrosReview
+                  items={p.outrosItems}
+                  decisions={p.outrosDecisions ?? {}}
+                  onChange={p.onOutrosChange}
+                  outrosPct={s.gastosVariaveis.total > 0 ? (s.gastosVariaveis.byCategory.find((c) => c.category === 'Outros')?.total ?? 0) / s.gastosVariaveis.total : 0}
+                />
+              )}
             </section>
           )}
 
